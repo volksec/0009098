@@ -1,9 +1,26 @@
 # Segredos locais
 
-Este diretório contém segredos **apenas para desenvolvimento local**, injetados como Docker
-secrets em runtime — nunca embutidos na imagem (RNF-004).
+**Nenhuma credencial é versionada neste repositório**, nem de desenvolvimento (RNF-004).
 
-`db_password.txt` é um valor de desenvolvimento e não protege nada real. Em qualquer ambiente
-que não seja a máquina do desenvolvedor, o segredo vem de um cofre externo.
+Os arquivos `*.txt` deste diretório estão no `.gitignore`. Apenas os `*.txt.example` são
+versionados, com valores-marcador.
 
-O CI executa varredura de segredo (gitleaks) e falha o merge se um segredo real for commitado.
+## Preparar o ambiente local
+
+```bash
+cp infrastructure/secrets/db_password.txt.example infrastructure/secrets/db_password.txt
+cp .env.example .env
+```
+
+Depois edite os dois arquivos com valores locais próprios. O `docker compose up` falha
+explicitamente se as variáveis não estiverem definidas — falha fechado, em vez de subir
+com um padrão inseguro.
+
+## Por que não deixar a senha de desenvolvimento no repositório
+
+"É só local" é a justificativa que costuma preceder o vazamento: o valor local vira o valor
+de homologação, que vira o de produção. Além disso, um segredo no histórico do git permanece
+lá mesmo depois de removido do HEAD.
+
+O CI executa varredura de segredo (gitleaks) e bloqueia o merge se alguma credencial for
+commitada.

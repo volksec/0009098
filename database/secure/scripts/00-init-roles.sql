@@ -24,21 +24,28 @@ COMMENT ON SCHEMA regulatory IS
 -- ---------------------------------------------------------------- papéis
 -- nexus_migrator (POSTGRES_USER) aplica DDL. A aplicação NÃO usa este papel.
 
+-- As senhas vêm do ambiente (arquivo .env local, não versionado). Nenhuma credencial,
+-- nem de desenvolvimento, é escrita neste arquivo — um repositório público não é lugar
+-- para senha, e "é só local" é exatamente a justificativa que precede o vazamento.
+\getenv app_user_password POSTGRES_APP_USER_PASSWORD
+\getenv app_regulator_password POSTGRES_APP_REGULATOR_PASSWORD
+\getenv app_worker_password POSTGRES_APP_WORKER_PASSWORD
+
 DO $$
 BEGIN
     -- DML dentro do tenant. Sem DDL, sem BYPASSRLS.
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
-        CREATE ROLE app_user LOGIN PASSWORD 'app_user_local_dev';
+        EXECUTE format('CREATE ROLE app_user LOGIN PASSWORD %L', :'app_user_password');
     END IF;
 
     -- Somente leitura, e apenas no schema regulatory (views mascaradas).
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_regulator') THEN
-        CREATE ROLE app_regulator LOGIN PASSWORD 'app_regulator_local_dev';
+        EXECUTE format('CREATE ROLE app_regulator LOGIN PASSWORD %L', :'app_regulator_password');
     END IF;
 
     -- Workers: Outbox, renovação, faturamento, verificação de integridade.
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_worker') THEN
-        CREATE ROLE app_worker LOGIN PASSWORD 'app_worker_local_dev';
+        EXECUTE format('CREATE ROLE app_worker LOGIN PASSWORD %L', :'app_worker_password');
     END IF;
 END $$;
 

@@ -26,6 +26,10 @@ services:
       # Locale pt-BR para colação correta em busca textual de nomes
       POSTGRES_INITDB_ARGS: "--locale=pt_BR.UTF-8 --encoding=UTF8"
       LANG: pt_BR.utf8
+      # Consumidas pelo 00-init-roles.sql via \getenv — vêm do .env local, não do repositório
+      POSTGRES_APP_USER_PASSWORD: ${POSTGRES_APP_USER_PASSWORD:?defina em .env}
+      POSTGRES_APP_REGULATOR_PASSWORD: ${POSTGRES_APP_REGULATOR_PASSWORD:?defina em .env}
+      POSTGRES_APP_WORKER_PASSWORD: ${POSTGRES_APP_WORKER_PASSWORD:?defina em .env}
     secrets:
       - db_password
     volumes:

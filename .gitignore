@@ -8,3 +8,7 @@ TestResults/
 coverage/
 .env
 *.log
+
+# Segredos locais: só os .example são versionados
+infrastructure/secrets/*.txt
+.env
