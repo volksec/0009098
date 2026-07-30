@@ -992,7 +992,7 @@ Entrega **incremental** em 10 fases.
 |---|---|---|
 | **1** | Nome, conceito, requisitos, casos de uso, bounded contexts, modelo de domínio, agregados, VOs, modelo físico, ER, arquitetura, ADRs, plano | ✅ **Concluída** |
 | **2** | Fundação: solução .NET, SharedKernel, 19 VOs com testes, Compose, init do PostgreSQL, CI | ✅ **Concluída** |
-| **3** | Banco: migrations, tipos compostos, constraints, índices, RLS, particionamento, Outbox, seeds | 🔄 **Em andamento** |
+| **3** | Banco: 9 migrations, tipos compostos, constraints, índices, RLS, particionamento, Outbox, rollback, esquema vulnerável | ⚠️ **Escrito, não executado** — ver nota |
 | **4** | Domínio + API do núcleo: Identity, Customers, Products, Quotations, Proposals, Policies | ⏳ |
 | **5** | Billing, Commissions, Claims, Documents, Notifications, workers | ⏳ |
 | **6** | Frontend: design system, telas de operação, Data Browser | ⏳ |
@@ -1003,6 +1003,17 @@ Entrega **incremental** em 10 fases.
 
 **Verificado:** 95 testes passando (89 unitários + 6 arquiteturais), build Release sem avisos,
 `TreatWarningsAsErrors` ativo.
+
+> ### ⚠️ Nota sobre a Fase 3
+>
+> As 9 migrations (2.233 linhas de SQL) estão escritas e revisadas, mas **nunca foram
+> executadas** — a máquina de desenvolvimento não tem Docker instalado, e sem um PostgreSQL 16
+> real não há como aplicá-las. SQL desse volume que nunca rodou quase certamente contém erros de
+> sintaxe ou de ordem de dependência.
+>
+> Considere a Fase 3 **entregue como projeto, não como código verificado**. A verificação
+> acontece assim que houver Docker: `migrate` → `rollback` → `migrate` em base limpa, mais os
+> testes de RLS e de constraint via Testcontainers.
 
 > **Transparência sobre o estado:** as seções [12.4](#124-aplicar-migrations-e-carregar-a-massa-sintética)
 > a [12.11](#1211-tudo-de-uma-vez) descrevem o fluxo de execução alvo. Os componentes das fases
