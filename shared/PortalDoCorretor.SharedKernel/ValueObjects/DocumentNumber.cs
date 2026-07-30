@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
-using NexusBroker.SharedKernel.Errors;
+using PortalDoCorretor.SharedKernel.Errors;
 
-namespace NexusBroker.SharedKernel.ValueObjects;
+namespace PortalDoCorretor.SharedKernel.ValueObjects;
 
 public enum DocumentKind
 {

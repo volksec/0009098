@@ -1,9 +1,9 @@
 using System.Reflection;
 using FluentAssertions;
 using NetArchTest.Rules;
-using NexusBroker.SharedKernel.Domain;
+using PortalDoCorretor.SharedKernel.Domain;
 
-namespace NexusBroker.Architecture.Tests;
+namespace PortalDoCorretor.Architecture.Tests;
 
 /// <summary>
 /// Regras arquiteturais aplicadas ao SharedKernel. O objetivo é transformar decisões de
@@ -74,7 +74,7 @@ public sealed class SharedKernelRules
     public void Value_objects_nao_expoem_setter_publico()
     {
         var offenders = SharedKernelTypes
-            .That().ResideInNamespace("NexusBroker.SharedKernel.ValueObjects")
+            .That().ResideInNamespace("PortalDoCorretor.SharedKernel.ValueObjects")
             .GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false } || t.IsValueType)
             .SelectMany(t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance))

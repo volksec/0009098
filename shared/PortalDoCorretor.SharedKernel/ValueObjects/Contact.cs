@@ -1,7 +1,7 @@
 using System.Text;
-using NexusBroker.SharedKernel.Errors;
+using PortalDoCorretor.SharedKernel.Errors;
 
-namespace NexusBroker.SharedKernel.ValueObjects;
+namespace PortalDoCorretor.SharedKernel.ValueObjects;
 
 /// <summary>
 /// Endereço de e-mail normalizado para minúsculas — a normalização acontece na construção,

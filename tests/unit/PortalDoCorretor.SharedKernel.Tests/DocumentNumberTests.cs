@@ -1,8 +1,8 @@
 using FluentAssertions;
-using NexusBroker.SharedKernel.Errors;
-using NexusBroker.SharedKernel.ValueObjects;
+using PortalDoCorretor.SharedKernel.Errors;
+using PortalDoCorretor.SharedKernel.ValueObjects;
 
-namespace NexusBroker.SharedKernel.Tests;
+namespace PortalDoCorretor.SharedKernel.Tests;
 
 /// <summary>
 /// Documentos usados aqui são <b>sintéticos</b>: possuem dígito verificador válido, mas foram

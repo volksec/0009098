@@ -1,6 +1,6 @@
-# Value Objects — NexusBroker
+# Value Objects — PortalDoCorretor
 
-Um Value Object (VO) é definido por **seus atributos**, não por identidade. No NexusBroker todo VO
+Um Value Object (VO) é definido por **seus atributos**, não por identidade. No PortalDoCorretor todo VO
 obedece a sete regras, sem exceção:
 
 1. **Imutável** — apenas `init`/construtor privado; nenhum setter público.
@@ -42,7 +42,7 @@ Complementares específicos do domínio: `LicensePlate`, `Vin`, `SusepRegistrati
 ### `Money` — a base de todo valor financeiro
 
 ```csharp
-namespace NexusBroker.SharedKernel.ValueObjects;
+namespace PortalDoCorretor.SharedKernel.ValueObjects;
 
 /// <summary>
 /// Valor monetário com moeda. Escala fixa de 2 casas, arredondamento bancário.
@@ -238,7 +238,7 @@ ALTER TABLE policies ADD CONSTRAINT ex_policies_no_overlap
 public readonly record struct PolicyNumber
 {
     private static readonly Regex Pattern =
-        new(@"^NB-(?<year>\d{4})-(?<seq>\d{8})-(?<dv>\d)$", RegexOptions.Compiled);
+        new(@"^PC-(?<year>\d{4})-(?<seq>\d{8})-(?<dv>\d)$", RegexOptions.Compiled);
 
     public string Value { get; }
     private PolicyNumber(string value) => Value = value;
@@ -262,7 +262,7 @@ public readonly record struct PolicyNumber
     public static PolicyNumber Generate(int year, long sequence)
     {
         var payload = $"{year:D4}{sequence:D8}";
-        return new PolicyNumber($"NB-{year:D4}-{sequence:D8}-{CheckDigit.Mod11(payload)}");
+        return new PolicyNumber($"PC-{year:D4}-{sequence:D8}-{CheckDigit.Mod11(payload)}");
     }
 }
 ```

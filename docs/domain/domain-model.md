@@ -1,4 +1,4 @@
-# Modelo orientado a objetos — NexusBroker
+# Modelo orientado a objetos — PortalDoCorretor
 
 Este documento demonstra os mecanismos de OO exigidos: herança, composição, associação, agregação,
 polimorfismo, encapsulamento, interfaces, classes abstratas, aggregate roots, entidades, value

@@ -111,8 +111,8 @@ jobs:
 
       - name: Rede do laboratório é interna (sem rota externa)
         run: |
-          if ! grep -A3 'nexus-lab:' docker-compose.yml | grep -q 'internal: true'; then
-            echo "::error::A rede nexus-lab deve ser internal: true"
+          if ! grep -A3 'pdc-lab:' docker-compose.yml | grep -q 'internal: true'; then
+            echo "::error::A rede pdc-lab deve ser internal: true"
             exit 1
           fi
-          echo "OK: nexus-lab isolada"
+          echo "OK: pdc-lab isolada"

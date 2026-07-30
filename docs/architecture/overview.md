@@ -1,4 +1,4 @@
-# Arquitetura — NexusBroker
+# Arquitetura — PortalDoCorretor
 
 ## 1. Estilo arquitetural
 
@@ -65,7 +65,7 @@ graph TB
     B["👤 Corretor<br/>opera a carteira"]
     R["🏛️ Usuário regulatório<br/>(SUSEP simulado)<br/>supervisiona"]
 
-    NB["<b>NexusBroker</b><br/>Plataforma de gestão<br/>para corretores de seguros"]
+    NB["<b>PortalDoCorretor</b><br/>Plataforma de gestão<br/>para corretores de seguros"]
 
     OBS["Stack de observabilidade<br/>Prometheus · Grafana · Loki · Tempo"]
     LLM["Provedor de LLM<br/>(agentes de IA)"]
@@ -90,28 +90,28 @@ deliberadamente fechado, e toda "integração" é simulada internamente.
 graph TB
     U["👤 Corretor / Regulador"]
 
-    subgraph Rede_publica["Rede: nexus-frontend"]
+    subgraph Rede_publica["Rede: pdc-frontend"]
         FE["<b>frontend</b><br/>React · TypeScript · Vite<br/>Tailwind · shadcn/ui"]
     end
 
-    subgraph Rede_app["Rede: nexus-app (interna)"]
+    subgraph Rede_app["Rede: pdc-app (interna)"]
         API["<b>secure-api</b><br/>ASP.NET Core 9<br/>monólito modular"]
         AI["<b>ai-agent-service</b><br/>agentes governados"]
         WRK["<b>workers</b><br/>Outbox · Renewal · Billing"]
     end
 
-    subgraph Rede_dados["Rede: nexus-data (sem saída externa)"]
+    subgraph Rede_dados["Rede: pdc-data (sem saída externa)"]
         PG[("<b>secure-database</b><br/>PostgreSQL 16<br/>RLS · particionamento")]
         RD[("<b>redis</b><br/>cache · rate limit")]
     end
 
-    subgraph Rede_lab["Rede: nexus-lab (ISOLADA · profile security-lab)"]
+    subgraph Rede_lab["Rede: pdc-lab (ISOLADA · profile security-lab)"]
         VAPI["<b>vulnerable-api</b><br/>⚠️ falhas propositais"]
         VPG[("<b>vulnerable-database</b><br/>⚠️ sem constraints, sem RLS")]
         ATK["<b>attack-simulator</b><br/>18 cenários"]
     end
 
-    subgraph Rede_obs["Rede: nexus-observability"]
+    subgraph Rede_obs["Rede: pdc-observability"]
         OTEL["otel-collector"]
         PROM["prometheus"]
         GRAF["grafana"]

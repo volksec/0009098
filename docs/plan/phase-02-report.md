@@ -7,7 +7,7 @@
 | Item | Onde | Verificação |
 |---|---|---|
 | Solução .NET 9 com regras de build rígidas | `Directory.Build.props` | `TreatWarningsAsErrors` ativo — aviso quebra o build |
-| SharedKernel: abstrações de domínio | `shared/NexusBroker.SharedKernel/Domain/` | `Entity`, `AggregateRoot`, `IDomainEvent`, `ITenantScoped`, `ISoftDeletable`, `IAuditable`, `IClock` |
+| SharedKernel: abstrações de domínio | `shared/PortalDoCorretor.SharedKernel/Domain/` | `Entity`, `AggregateRoot`, `IDomainEvent`, `ITenantScoped`, `ISoftDeletable`, `IAuditable`, `IClock` |
 | 16 Value Objects imutáveis e autovalidados | `shared/.../ValueObjects/` | 89 testes unitários |
 | Testes arquiteturais | `tests/architecture/` | 6 regras verificadas |
 | Docker Compose com profile isolado | `docker-compose.yml` | Laboratório vulnerável fora do comando padrão |

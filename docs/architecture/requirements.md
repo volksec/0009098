@@ -1,4 +1,4 @@
-# Requisitos — NexusBroker
+# Requisitos — PortalDoCorretor
 
 Convenções: `RF` = requisito funcional, `RNF` = requisito não funcional.
 Prioridade `M` (must, Fase 2–5), `S` (should, Fase 6–8), `C` (could, Fase 9–10).

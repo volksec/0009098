@@ -1,6 +1,6 @@
-using NexusBroker.SharedKernel.Errors;
+using PortalDoCorretor.SharedKernel.Errors;
 
-namespace NexusBroker.SharedKernel.ValueObjects;
+namespace PortalDoCorretor.SharedKernel.ValueObjects;
 
 /// <summary>
 /// Fração entre 0 e 1 (0,15 = 15%). Escala de 6 casas — suficiente para fatores de

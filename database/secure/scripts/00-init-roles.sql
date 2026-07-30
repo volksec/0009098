@@ -1,5 +1,5 @@
 -- =============================================================================
--- NexusBroker — inicialização de papéis, extensões e contexto de tenant
+-- PortalDoCorretor — inicialização de papéis, extensões e contexto de tenant
 -- Executado uma única vez, na criação do contêiner do PostgreSQL.
 --
 -- Princípio: menor privilégio. A aplicação NUNCA usa um papel com DDL ou BYPASSRLS.

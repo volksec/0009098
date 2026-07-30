@@ -1,6 +1,6 @@
-using NexusBroker.SharedKernel.ValueObjects;
+using PortalDoCorretor.SharedKernel.ValueObjects;
 
-namespace NexusBroker.SharedKernel.Domain;
+namespace PortalDoCorretor.SharedKernel.Domain;
 
 /// <summary>Entidade: identidade estável, igualdade por identidade (não por valor).</summary>
 public abstract class Entity<TId> : IEquatable<Entity<TId>>

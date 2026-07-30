@@ -19,7 +19,7 @@ docker compose up --build
 docker compose --profile security-lab up --build
 ```
 
-Controles de contenção: rede Docker `nexus-lab` **sem rota externa** e sem acesso à rede de dados
+Controles de contenção: rede Docker `pdc-lab` **sem rota externa** e sem acesso à rede de dados
 segura; banco separado com massa sintética própria; limites de CPU e memória; reset automático a
 cada execução do simulador; faixa âmbar permanente na UI com o rótulo
 `LAB VULNERÁVEL — DADOS SINTÉTICOS — REDE ISOLADA`; ausência total do GitHub Pages; e teste

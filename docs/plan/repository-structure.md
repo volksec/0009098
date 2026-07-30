@@ -5,7 +5,7 @@
 ├── apps/
 │   ├── frontend/                    # React + TS + Vite (design system próprio)
 │   │   ├── src/
-│   │   │   ├── design-system/       # tokens nexus-*, componentes base, Storybook
+│   │   │   ├── design-system/       # tokens pdc-*, componentes base, Storybook
 │   │   │   ├── features/            # vertical slices espelhando os módulos do backend
 │   │   │   │   ├── auth/  customers/  quotations/  proposals/
 │   │   │   │   ├── policies/  commissions/  claims/  regulatory/
@@ -28,15 +28,15 @@
 │   ├── regulatory/      ├── auditing/      ├── observability/ └── ai/
 │   │
 │   └── <cada módulo>/
-│       ├── NexusBroker.<Modulo>.Domain/          # sem dependência de framework
-│       ├── NexusBroker.<Modulo>.Application/
-│       ├── NexusBroker.<Modulo>.Infrastructure/
-│       └── NexusBroker.<Modulo>.Contracts/       # único assembly referenciável por outros
+│       ├── PortalDoCorretor.<Modulo>.Domain/          # sem dependência de framework
+│       ├── PortalDoCorretor.<Modulo>.Application/
+│       ├── PortalDoCorretor.<Modulo>.Infrastructure/
+│       └── PortalDoCorretor.<Modulo>.Contracts/       # único assembly referenciável por outros
 │
 ├── shared/
-│   ├── NexusBroker.SharedKernel/    # Entity, AggregateRoot, VOs comuns, IDomainEvent
-│   ├── NexusBroker.Persistence/     # DbContext base, interceptors, conversores, RLS
-│   └── NexusBroker.Web/             # middlewares, problem details, rate limit, headers
+│   ├── PortalDoCorretor.SharedKernel/    # Entity, AggregateRoot, VOs comuns, IDomainEvent
+│   ├── PortalDoCorretor.Persistence/     # DbContext base, interceptors, conversores, RLS
+│   └── PortalDoCorretor.Web/             # middlewares, problem details, rate limit, headers
 │
 ├── database/
 │   ├── secure/
@@ -73,7 +73,7 @@
 │
 ├── README.md  SECURITY.md  CONTRIBUTING.md  CODE_OF_CONDUCT.md
 ├── CHANGELOG.md  LICENSE  docker-compose.yml
-└── NexusBroker.sln
+└── PortalDoCorretor.sln
 ```
 
 ## Regras de dependência (verificadas por NetArchTest)

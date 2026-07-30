@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
-using NexusBroker.SharedKernel.Errors;
+using PortalDoCorretor.SharedKernel.Errors;
 
-namespace NexusBroker.SharedKernel.ValueObjects;
+namespace PortalDoCorretor.SharedKernel.ValueObjects;
 
 /// <summary>Dígito verificador módulo 11, compartilhado pela numeração de negócio.</summary>
 internal static class CheckDigit
@@ -23,7 +23,7 @@ internal static class CheckDigit
 }
 
 /// <summary>
-/// Número de apólice no formato <c>NB-AAAA-NNNNNNNN-D</c>.
+/// Número de apólice no formato <c>PC-AAAA-NNNNNNNN-D</c>.
 /// </summary>
 /// <remarks>
 /// O dígito verificador não é enfeite: torna inválido um número adivinhado por incremento,
@@ -33,7 +33,7 @@ internal static class CheckDigit
 /// </remarks>
 public readonly partial record struct PolicyNumber
 {
-    [GeneratedRegex(@"^NB-(?<year>\d{4})-(?<seq>\d{8})-(?<dv>\d)$")]
+    [GeneratedRegex(@"^PC-(?<year>\d{4})-(?<seq>\d{8})-(?<dv>\d)$")]
     private static partial Regex Pattern();
 
     public string Value { get; }
@@ -65,7 +65,7 @@ public readonly partial record struct PolicyNumber
     public static PolicyNumber Generate(int year, long sequence)
     {
         var payload = $"{year:D4}{sequence:D8}";
-        return new PolicyNumber($"NB-{year:D4}-{sequence:D8}-{CheckDigit.Mod11(payload)}");
+        return new PolicyNumber($"PC-{year:D4}-{sequence:D8}-{CheckDigit.Mod11(payload)}");
     }
 
     public int Year => int.Parse(Value[3..7]);

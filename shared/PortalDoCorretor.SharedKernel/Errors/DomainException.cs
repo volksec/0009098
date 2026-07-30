@@ -1,4 +1,4 @@
-namespace NexusBroker.SharedKernel.Errors;
+namespace PortalDoCorretor.SharedKernel.Errors;
 
 /// <summary>
 /// Erro de regra de negócio. Carrega um código estável, adequado para tradução e para

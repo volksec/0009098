@@ -2,10 +2,10 @@ using FluentAssertions;
 using FsCheck;
 using FsCheck.Fluent;
 using FsCheck.Xunit;
-using NexusBroker.SharedKernel.Errors;
-using NexusBroker.SharedKernel.ValueObjects;
+using PortalDoCorretor.SharedKernel.Errors;
+using PortalDoCorretor.SharedKernel.ValueObjects;
 
-namespace NexusBroker.SharedKernel.Tests;
+namespace PortalDoCorretor.SharedKernel.Tests;
 
 public sealed class MoneyTests
 {

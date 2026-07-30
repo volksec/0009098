@@ -1,4 +1,4 @@
-# Diagrama entidade-relacionamento — NexusBroker
+# Diagrama entidade-relacionamento — PortalDoCorretor
 
 ## 1. Visão geral (fluxo principal do negócio)
 

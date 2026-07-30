@@ -6,7 +6,7 @@ de domínio.
 
 ## 1. Por que PostgreSQL
 
-| Recurso | Uso concreto no NexusBroker |
+| Recurso | Uso concreto no PortalDoCorretor |
 |---|---|
 | **ACID** | Emissão de apólice confirma proposta, apólice, coberturas, parcelas, comissão, evento e auditoria em uma transação |
 | **Integridade referencial** | FKs declaradas com `ON DELETE` explícito; teste tenta inserir órfão por SQL direto e falha |

@@ -1,4 +1,4 @@
-# Casos de uso — NexusBroker
+# Casos de uso — PortalDoCorretor
 
 Notação: `UC-<contexto>-<n>`. Cada caso indica ator, pré-condições, fluxo principal, fluxos
 alternativos, invariantes verificadas, eventos produzidos e evidência observável no Live

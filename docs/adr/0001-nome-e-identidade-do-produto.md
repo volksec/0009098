@@ -11,12 +11,12 @@ e inequivocamente distinta.
 
 ## Decisão
 
-Nome **NexusBroker**, com identidade autoral completa: logotipo (monograma `NB` em hexágono
-aberto), paleta `nexus-*` (azul-marinho, azul-elétrico, âmbar, verde, vermelho), tipografia livre
+Nome **PortalDoCorretor**, com identidade autoral completa: logotipo (monograma `NB` em hexágono
+aberto), paleta `pdc-*` (azul-marinho, azul-elétrico, âmbar, verde, vermelho), tipografia livre
 (Inter + JetBrains Mono) e design system próprio construído sobre Tailwind + shadcn/ui, com os
 componentes versionados no repositório.
 
-Cinco candidatos foram avaliados (ver README). "NexusBroker" venceu por comunicar o papel de hub
+Cinco candidatos foram avaliados (ver README). "PortalDoCorretor" venceu por comunicar o papel de hub
 entre corretor, cliente, produto e regulador, permitir submarcas e não colidir com nomenclatura
 existente no setor.
 
@@ -29,7 +29,7 @@ existente no setor.
 
 ## Consequências
 
-- Todo material (README, Pages, UI, containers, namespaces) usa `NexusBroker` / `nexusbroker`.
+- Todo material (README, Pages, UI, containers, namespaces) usa `PortalDoCorretor` / `portal-do-corretor`.
 - O aviso de escopo aparece no README, na landing do Pages e no rodapé da aplicação.
 - O modo laboratório usa faixa âmbar com rótulo explícito, impedindo confusão entre ambientes.
 - shadcn/ui foi escolhido justamente porque os componentes são **copiados para o repositório**, não

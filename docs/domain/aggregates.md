@@ -1,4 +1,4 @@
-# Agregados — NexusBroker
+# Agregados — PortalDoCorretor
 
 Um agregado é a **fronteira de consistência transacional**: tudo dentro dele é confirmado junto e
 obedece às invariantes do *Aggregate Root*; tudo fora é referenciado por **identidade**, nunca por

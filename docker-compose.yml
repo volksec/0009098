@@ -1,11 +1,11 @@
-# NexusBroker — ambiente local
+# PortalDoCorretor — ambiente local
 #
 #   docker compose up --build                          → ambiente SEGURO (padrão)
 #   docker compose --profile security-lab up --build    → inclui o laboratório vulnerável
 #
 # O laboratório vulnerável NUNCA sobe no comando padrão (ADR-0009).
 
-name: nexusbroker
+name: portal-do-corretor
 
 x-security-baseline: &security-baseline
   security_opt:
@@ -17,10 +17,10 @@ services:
   # ---------------------------------------------------------------- dados (seguro)
   secure-database:
     image: postgres:16.4-alpine
-    container_name: nexus-secure-db
+    container_name: pdc-secure-db
     <<: *security-baseline
     environment:
-      POSTGRES_DB: nexusbroker
+      POSTGRES_DB: portal-do-corretor
       POSTGRES_USER: nexus_migrator
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
       # Locale pt-BR para colação correta em busca textual de nomes
@@ -38,9 +38,9 @@ services:
     ports:
       - "127.0.0.1:5432:5432"   # exposto apenas em loopback
     networks:
-      - nexus-data
+      - pdc-data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nexus_migrator -d nexusbroker"]
+      test: ["CMD-SHELL", "pg_isready -U nexus_migrator -d portal-do-corretor"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -70,13 +70,13 @@ services:
 
   redis:
     image: redis:7.4-alpine
-    container_name: nexus-redis
+    container_name: pdc-redis
     <<: *security-baseline
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redis-data:/data
     networks:
-      - nexus-data
+      - pdc-data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -91,20 +91,20 @@ services:
   # ------------------------------------------------- laboratório vulnerável (isolado)
   vulnerable-database:
     image: postgres:16.4-alpine
-    container_name: nexus-vulnerable-db
+    container_name: pdc-vulnerable-db
     profiles: ["security-lab"]
     <<: *security-baseline
     environment:
-      POSTGRES_DB: nexusbroker_vulnerable
+      POSTGRES_DB: portal-do-corretor_vulnerable
       POSTGRES_USER: vulnerable_app
       # Segredo fraco DELIBERADO: é um dos achados que o Security Lab demonstra
       POSTGRES_PASSWORD: vulnerable_lab_only
     volumes:
       - vulnerable-db-data:/var/lib/postgresql/data
     networks:
-      - nexus-lab          # rede SEM rota externa e SEM acesso à rede de dados segura
+      - pdc-lab          # rede SEM rota externa e SEM acesso à rede de dados segura
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vulnerable_app -d nexusbroker_vulnerable"]
+      test: ["CMD-SHELL", "pg_isready -U vulnerable_app -d portal-do-corretor_vulnerable"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -114,7 +114,7 @@ services:
           cpus: "0.5"
           memory: 384M
     labels:
-      br.com.nexusbroker.warning: "LABORATORIO VULNERAVEL - DADOS SINTETICOS - NAO EXPOR"
+      br.com.portal-do-corretor.warning: "LABORATORIO VULNERAVEL - DADOS SINTETICOS - NAO EXPOR"
 
 volumes:
   secure-db-data:
@@ -126,11 +126,11 @@ secrets:
     file: ./infrastructure/secrets/db_password.txt
 
 networks:
-  nexus-data:
+  pdc-data:
     driver: bridge
-  nexus-app:
+  pdc-app:
     driver: bridge
   # internal: true bloqueia QUALQUER rota externa — o laboratório não alcança a internet
-  nexus-lab:
+  pdc-lab:
     driver: bridge
     internal: true

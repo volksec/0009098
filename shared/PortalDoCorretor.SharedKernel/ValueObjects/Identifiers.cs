@@ -1,6 +1,6 @@
-using NexusBroker.SharedKernel.Errors;
+using PortalDoCorretor.SharedKernel.Errors;
 
-namespace NexusBroker.SharedKernel.ValueObjects;
+namespace PortalDoCorretor.SharedKernel.ValueObjects;
 
 /// <summary>
 /// Identificador da corretora — o tenant.

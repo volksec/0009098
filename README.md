@@ -1,31 +1,19 @@
 <div align="center">
 
+# Portal do Corretor
+
 **Plataforma de gestão para corretores de seguros**
 
-*Case técnico de Engenharia de Software — banco de dados objeto-relacional,
-modelo de domínio rico e segurança desde a concepção*
+Banco de dados objeto-relacional · Modelo de domínio rico · Arquitetura modular
 
 [![.NET 9](https://img.shields.io/badge/.NET-9.0-512BD4)](https://dotnet.microsoft.com/)
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791)](https://www.postgresql.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev/)
-[![Testes](https://img.shields.io/badge/testes-95%20passando-1F9D63)](#13-estratégia-de-testes)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)](https://docs.docker.com/compose/)
+[![Testes](https://img.shields.io/badge/testes-95%20passando-1F9D63)](#9-testes)
 [![Licença](https://img.shields.io/badge/licença-MIT-1F6FEB)](LICENSE)
 
 </div>
-
----
-
-> ### ⚠️ Aviso de escopo e conformidade
->
-> Projeto **independente de demonstração técnica**, inspirado *conceitualmente* em portais
-> corporativos do segmento de corretagem de seguros. **Não** possui vínculo, integração, dado,
-> credencial, endpoint, fluxo interno ou elemento de marca de nenhuma seguradora real.
->
-> O perfil regulatório é uma **simulação** criada para demonstrar controles de supervisão,
-> minimização de dados e auditoria — **não** representa integração oficial com a SUSEP.
->
-> **Todos os dados de negócio são sintéticos.** A aplicação, o banco, as transações, as queries,
-> os controles de segurança e os processamentos são **reais**.
 
 ---
 
@@ -33,198 +21,395 @@ modelo de domínio rico e segurança desde a concepção*
 
 | | Seção | | Seção |
 |---|---|---|---|
-| 1 | [A tese do case](#1-a-tese-do-case) | 9 | [Segurança](#9-segurança) |
-| 2 | [O produto](#2-o-produto) | 10 | [Telas e laboratórios](#10-telas-e-laboratórios) |
-| 3 | [O problema de negócio](#3-o-problema-de-negócio) | 11 | [Observabilidade](#11-observabilidade) |
-| 4 | [Usuários](#4-usuários) | 12 | [**Como executar localmente**](#12-como-executar-localmente) |
-| 5 | [Arquitetura](#5-arquitetura) | 13 | [Estratégia de testes](#13-estratégia-de-testes) |
-| 6 | [Modelo de domínio](#6-modelo-de-domínio) | 14 | [Estado do projeto](#14-estado-do-projeto) |
-| 7 | [Banco objeto-relacional](#7-banco-objeto-relacional) | 15 | [Decisões arquiteturais](#15-decisões-arquiteturais-adrs) |
-| 8 | [Fluxos de negócio](#8-fluxos-de-negócio) | 16 | [Guia de apresentação](#16-guia-de-apresentação) |
+| 1 | [Visão geral](#1-visão-geral) | 7 | [Segurança de aplicação](#7-segurança-de-aplicação) |
+| 2 | [**Subindo o ambiente**](#2-subindo-o-ambiente) | 8 | [Observabilidade](#8-observabilidade) |
+| 3 | [Estrutura do repositório](#3-estrutura-do-repositório) | 9 | [Testes](#9-testes) |
+| 4 | [Arquitetura](#4-arquitetura) | 10 | [Ferramentas de engenharia](#10-ferramentas-de-engenharia) |
+| 5 | [Modelo de domínio](#5-modelo-de-domínio) | 11 | [Estado do projeto](#11-estado-do-projeto) |
+| 6 | [Banco objeto-relacional](#6-banco-objeto-relacional) | 12 | [Decisões arquiteturais](#12-decisões-arquiteturais-adrs) |
 
 ---
 
-## 1. A tese do case
+## 1. Visão geral
 
-Este projeto não é uma vitrine de interface. É a demonstração de uma afirmação específica,
-verificável em tempo real:
+O Portal do Corretor cobre o ciclo de vida comercial da corretagem de seguros —
+**cliente → bem segurável → cotação → proposta → apólice → parcelas → comissão → renovação →
+sinistro** — implementado como um monólito modular com Clean Architecture, DDD tático e
+PostgreSQL usado como banco objeto-relacional de verdade.
 
-> **O banco de dados, os objetos de domínio, as regras, as transações, os controles de segurança
-> e os processamentos são reais e podem ser acompanhados ao vivo. Os dados são sintéticos
-> exclusivamente para preservar privacidade, conformidade e segurança.**
+### Capacidades técnicas
 
-O avaliador dispara uma operação de negócio real — emitir uma apólice — e assiste, passo a passo:
+| Área | Implementação |
+|---|---|
+| **Persistência** | PostgreSQL 16 com tipos compostos, domains, enums, `daterange`, constraints de exclusão, índices parciais e GIN, particionamento mensal |
+| **Domínio** | Rich Domain Model — agregados com invariantes, 19 Value Objects imutáveis, eventos de domínio, specifications, serviços de domínio |
+| **Concorrência** | Optimistic locking com `xmin` nativo, chaves de idempotência, `SELECT ... FOR UPDATE SKIP LOCKED` |
+| **Multi-tenancy** | Isolamento em 5 camadas independentes, terminando em Row-Level Security com `FORCE` |
+| **Assincronismo** | Outbox transacional — evento e estado confirmados na mesma transação |
+| **Auditoria** | Trilha append-only imposta por `REVOKE` no banco, particionada por mês |
+| **Observabilidade** | OpenTelemetry ponta a ponta, correlation ID propagado até o banco, métricas de negócio, performance e integridade |
+| **Qualidade** | 95 testes (unitários, propriedade, arquiteturais), `TreatWarningsAsErrors`, fronteiras de módulo verificadas por NetArchTest |
+
+### Perfis de acesso
+
+- **Corretor** — usuário operacional, opera dentro do tenant da sua corretora.
+- **Regulatório** — perfil de supervisão somente-leitura, multi-tenant por escopo autorizado,
+  com finalidade de acesso obrigatória e dados minimizados.
+
+Funções de segurança, auditoria e administração são **capacidades internas** exercidas por contas
+técnicas (`Outbox Dispatcher`, `Renewal Scanner`, `Billing Scheduler`, `Integrity Checker`), não
+por perfis de usuário.
+
+---
+
+## 2. Subindo o ambiente
+
+### 2.1 Pré-requisitos
+
+| Ferramenta | Versão | Verificar |
+|---|---|---|
+| [.NET SDK](https://dotnet.microsoft.com/download/dotnet/9.0) | 9.0+ | `dotnet --version` |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | 24+ | `docker --version` |
+| Docker Compose | v2 | `docker compose version` |
+| [Node.js](https://nodejs.org/) | 20+ | `node --version` |
+| [Git](https://git-scm.com/) | 2.40+ | `git --version` |
+
+> **Windows** — o Docker Desktop precisa estar com WSL 2 habilitado e **em execução**. Os comandos
+> funcionam em PowerShell, Git Bash ou WSL.
+
+### 2.2 Clonar o repositório
+
+```bash
+git clone https://github.com/volksec/0009098.git
+```
+
+```bash
+cd 0009098
+```
+
+### 2.3 Configurar variáveis e segredos locais
+
+Nenhuma credencial é versionada. Crie os arquivos locais a partir dos exemplos:
+
+```bash
+cp .env.example .env
+```
+
+```bash
+cp infrastructure/secrets/db_password.txt.example infrastructure/secrets/db_password.txt
+```
+
+Edite os dois arquivos com valores próprios:
+
+```ini
+# .env
+POSTGRES_APP_USER_PASSWORD=defina_um_valor
+POSTGRES_APP_REGULATOR_PASSWORD=defina_um_valor
+POSTGRES_APP_WORKER_PASSWORD=defina_um_valor
+```
+
+O Compose **falha explicitamente** se alguma variável estiver ausente, em vez de subir com um
+padrão inseguro.
+
+### 2.4 Subir banco e cache
+
+```bash
+docker compose up -d secure-database redis
+```
+
+Confirme que os contêineres estão saudáveis:
+
+```bash
+docker compose ps
+```
+
+Esperado: `pdc-secure-db` e `pdc-redis` com status `healthy`. Em caso de falha:
+
+```bash
+docker compose logs secure-database
+```
+
+O PostgreSQL sobe com `pg_stat_statements`, `log_statement=all` e `log_lock_waits=on` — a
+instrumentação que alimenta o Query Inspector com planos e estatísticas reais.
+
+### 2.5 Aplicar migrations
+
+```bash
+dotnet run --project tools/PortalDoCorretor.DbMigrator -- migrate
+```
+
+Aplica as 9 migrations em ordem: tipos e domains → identidade e corretoras → clientes e bens →
+produtos e cotações → propostas e apólices → faturamento, comissões e sinistros → auditoria,
+Outbox e partições → RLS e privilégios → views regulatórias e verificações de integridade.
+
+Para reverter toda a cadeia:
+
+```bash
+dotnet run --project tools/PortalDoCorretor.DbMigrator -- rollback
+```
+
+### 2.6 Carregar a massa de dados
+
+```bash
+dotnet run --project tools/PortalDoCorretor.DbMigrator -- seed
+```
+
+Geração **determinística** (seed fixa): a mesma base é reproduzida em qualquer máquina, o que
+torna os benchmarks comparáveis entre execuções.
+
+| Tabela | Volume |
+|---|---|
+| Corretoras (tenants) | 8 |
+| Corretores | 40 |
+| Clientes | 25.000 |
+| Bens seguráveis | 38.000 |
+| Cotações | 60.000 |
+| Propostas | 22.000 |
+| Apólices | 14.000 |
+| Parcelas | 84.000 |
+| Comissões | 14.000 |
+| Sinistros | 1.800 |
+| Eventos de auditoria | 400.000 |
+
+O volume é dimensionado para que a diferença entre "com índice" e "sem índice" seja mensurável.
+Com poucas centenas de linhas, qualquer plano de execução é rápido e a comparação não informa nada.
+
+Para recriar a base do zero:
+
+```bash
+dotnet run --project tools/PortalDoCorretor.DbMigrator -- reset
+```
+
+### 2.7 Subir o backend
+
+```bash
+dotnet run --project apps/secure-api
+```
+
+API disponível em **http://localhost:8080**.
+
+| Endereço | Conteúdo |
+|---|---|
+| http://localhost:8080/swagger | Documentação interativa da API |
+| http://localhost:8080/health/live | Liveness |
+| http://localhost:8080/health/ready | Readiness — verifica banco, cache e migrations aplicadas |
+| http://localhost:8080/api/events/stream | Stream SSE do Live Processing Console |
+
+Em outro terminal, suba os workers:
+
+```bash
+dotnet run --project apps/workers
+```
+
+Os workers processam a Outbox, detectam renovações, avançam parcelas e executam as verificações
+de integridade. Sem eles a API continua funcionando, mas as mensagens da Outbox acumulam — o que,
+aliás, é uma forma direta de observar o padrão em ação no Transaction Inspector.
+
+### 2.8 Subir o frontend
+
+Em outro terminal:
+
+```bash
+cd apps/frontend
+```
+
+```bash
+npm install
+```
+
+```bash
+npm run dev
+```
+
+Frontend em **http://localhost:5173**, apontando para `http://localhost:8080` via
+`apps/frontend/.env.development`. Se o backend estiver em outra porta, ajuste `VITE_API_BASE_URL`.
+
+### 2.9 Usuários de acesso
+
+Criados pelo `seed`, existentes apenas no ambiente local:
+
+| Perfil | E-mail | Senha |
+|---|---|---|
+| Corretor (tenant A) | `ana.souza@corretoraalfa.test` | `Demo@2026!` |
+| Corretor (tenant A) | `bruno.lima@corretoraalfa.test` | `Demo@2026!` |
+| Corretor (tenant B) | `carla.dias@corretorabeta.test` | `Demo@2026!` |
+| Regulatório | `regulador@susep.test` | `Demo@2026!` |
+
+O perfil regulatório exige MFA; o código TOTP é impresso no log do `seed`.
+
+### 2.10 Observabilidade (opcional)
+
+```bash
+docker compose --profile observability up -d
+```
+
+| Serviço | Endereço |
+|---|---|
+| Grafana | http://localhost:3000 |
+| Prometheus | http://localhost:9090 |
+| Tempo (traces) | via Grafana |
+| Loki (logs) | via Grafana |
+
+### 2.11 Laboratório de segurança
+
+```bash
+docker compose --profile security-lab up --build
+```
+
+Sobe uma segunda API e um segundo banco, deliberadamente sem constraints, índices, RLS e
+auditoria, para comparação lado a lado com a implementação segura. Roda em rede Docker
+`internal: true`, sem rota externa, com limites de CPU e memória e reset automático.
+
+Disponível em http://localhost:5173/labs/security quando o profile está ativo.
+
+### 2.12 Tudo em contêiner
+
+```bash
+docker compose up --build
+```
+
+Sobe banco, cache, API, workers e frontend. Mais próximo de produção; durante o desenvolvimento,
+`dotnet run` + `npm run dev` é preferível pelo *hot reload*.
+
+### 2.13 Verificação rápida
+
+1. Entre como `ana.souza` e cadastre um cliente — observe a validação dos Value Objects.
+2. Abra o **Live Processing Console** em outra aba.
+3. Crie uma cotação, converta em proposta e emita a apólice.
+4. Percorra os **24 passos** da emissão no console; clique em qualquer um para ver camada, classe,
+   método, estado anterior e posterior, query, índice e duração.
+5. Abra o **Query Inspector** e veja o `EXPLAIN (ANALYZE, BUFFERS)` real da consulta que carregou
+   o agregado.
+6. Copie o ID da apólice, entre como `carla.dias` (outro tenant) e tente acessá-la — `404`, com
+   evento de segurança registrado.
+
+### 2.14 Problemas comuns
+
+| Sintoma | Causa | Solução |
+|---|---|---|
+| Compose falha com variável não definida | `.env` ausente | Refaça o passo [2.3](#23-configurar-variáveis-e-segredos-locais) |
+| Porta 5432 ocupada | PostgreSQL instalado na máquina | Pare o serviço local ou altere a porta no `docker-compose.yml` |
+| `/health/ready` retorna 503 | Migrations não aplicadas | Execute o passo [2.5](#25-aplicar-migrations) |
+| Erro de CORS no frontend | Backend em porta diferente | Ajuste `VITE_API_BASE_URL` |
+| Consulta retorna vazio sem erro | RLS ativa sem contexto de tenant | Comportamento correto — sem `SET LOCAL app.tenant_id` a política nega. Visível no Live Processing Console |
+| Testes de integração falham | Docker parado | Testcontainers exige Docker em execução |
+
+---
+
+## 3. Estrutura do repositório
 
 ```
-Value Object validando  →  agregado carregado com optimistic lock  →  invariante rejeitando
-estado inválido  →  query parametrizada com plano de execução e índice  →  RLS do PostgreSQL
-filtrando por tenant  →  evento de domínio  →  linha da Outbox  →  AuditEvent  →  COMMIT  →
-worker publicando  →  notificação  →  métrica subindo  →  trace fechando
+0009098/
+├── apps/
+│   ├── frontend/                 React · TypeScript · Vite · design system próprio
+│   ├── secure-api/               Host ASP.NET Core do monólito modular
+│   ├── vulnerable-api/           Contraparte para comparação (profile security-lab)
+│   ├── attack-simulator/         18 cenários executados contra as duas APIs
+│   ├── ai-agent-service/         Runtime dos agentes, com guardrails
+│   └── workers/                  Outbox Dispatcher · Renewal Scanner · Billing Scheduler
+│
+├── modules/                      Um projeto por bounded context
+│   ├── identity/    brokers/     customers/    products/
+│   ├── quotations/  proposals/   policies/     billing/
+│   ├── commissions/ claims/      documents/    notifications/
+│   ├── regulatory/  auditing/    observability/  ai/
+│   │
+│   └── <módulo>/
+│       ├── Domain/               Sem dependência de framework
+│       ├── Application/          Casos de uso (vertical slices)
+│       ├── Infrastructure/       EF Core, Dapper, adaptadores
+│       └── Contracts/            Único assembly referenciável por outros módulos
+│
+├── shared/
+│   ├── PortalDoCorretor.SharedKernel/   Entity, AggregateRoot, Value Objects, eventos
+│   ├── PortalDoCorretor.Persistence/    DbContext base, interceptors, conversores, RLS
+│   └── PortalDoCorretor.Web/            Middlewares, problem details, rate limit, headers
+│
+├── database/
+│   ├── secure/
+│   │   ├── migrations/           9 migrations versionadas
+│   │   ├── rollback/             Script de reversão por migration
+│   │   ├── scripts/              Init de papéis, extensões, contexto de tenant
+│   │   └── seeds/                Massa determinística
+│   └── vulnerable/               Mesmo domínio sem constraints, índices e RLS
+│
+├── tests/
+│   ├── unit/          integration/   architecture/
+│   ├── contract/      e2e/           performance/     security/
+│
+├── docs/
+│   ├── architecture/  adr/       c4/       uml/
+│   ├── domain/        database/  plan/     threat-model/
+│
+├── infrastructure/
+│   ├── docker/        compose/   monitoring/   ci/   scripts/
+│
+├── Directory.Build.props         TreatWarningsAsErrors, nullable, .NET 9
+├── docker-compose.yml
+└── PortalDoCorretor.sln
 ```
 
-E, em seguida, vê **o mesmo ataque** rodar contra a versão vulnerável (que falha) e contra a
-versão segura (que bloqueia, registra `SecurityEvent` e **nomeia o controle** que atuou).
+### Regras de dependência
 
-### A tese profissional
+Verificadas automaticamente por NetArchTest — violação falha o build, não vira observação em
+code review.
 
-A tese é que conhecimento ofensivo aplicado **na fase de concepção** produz software corporativo
-mais seguro do que revisão tardia. Cada controle da versão segura existe porque o ataque
-correspondente está implementado, executável e demonstrável no Security Lab — não porque um
-checklist mandou.
-
----
-
-## 2. O produto
-
-### Seleção do nome
-
-Cinco candidatos avaliados contra cinco critérios: ausência de colisão com marcas do setor,
-clareza para público de negócio, pronunciabilidade em pt-BR e inglês, capacidade de gerar
-submarcas e disponibilidade de namespace técnico.
-
-| # | Candidato | Força | Fraqueza | Veredito |
-|---|-----------|-------|----------|----------|
-| 1 | **Plataforma** | traduz o papel de *hub* que liga corretor ↔ cliente ↔ produto ↔ regulador; permite submarcas (`Regulatory`, `Copilot`, `Labs`) | Levemente anglófono | ✅ **Escolhido** |
-| 2 | Corretor 360 | Imediatamente compreensível no mercado brasileiro | "360" é sufixo saturado em produtos financeiros; baixa distintividade | ❌ |
-| 3 | SecureBroker | Reforça o eixo AppSec do case | Faz parecer ferramenta de cibersegurança, não plataforma de gestão de carteira | ❌ |
-| 4 | BrokerCore | Bom nome de plataforma | "Core" genérico; sugere componente interno, não produto de ponta a ponta | ❌ |
-| 5 | Aegis Corretores | Simbolicamente forte (proteção) | Referência erudita, baixa clareza; mistura idiomas | ❌ |
-
-Registro em [ADR-0001](docs/adr/0001-nome-e-identidade-do-produto.md).
-
-### Identidade visual própria
-
-Identidade **autoral**, sem tipografia, logotipo, iconografia ou paleta de terceiros.
-
-**Logotipo** — monograma `NB` inscrito em hexágono **aberto** no vértice superior direito,
-representando o nó de rede que conecta os atores do ecossistema. Sem escudos, brasões, gotas ou
-guarda-chuvas — nenhum arquétipo visual tradicional de seguradora.
-
-| Token | Hex | Uso |
-|---|---|---|
-| `nexus-navy-900` | `#0B2447` | Superfícies institucionais, header, sidebar |
-| `nexus-blue-600` | `#1F6FEB` | Ação primária, links, foco |
-| `nexus-blue-100` | `#DCE9FD` | Estados selecionados, badges informativos |
-| `nexus-slate-900` | `#141821` | Texto primário / fundo do modo escuro |
-| `nexus-slate-50` | `#F4F6F8` | Fundo da aplicação (modo claro) |
-| `nexus-amber-500` | `#F2A93B` | Pendências, atenção, avisos de laboratório |
-| `nexus-red-600` | `#D93F3F` | Erros, bloqueios de autorização, `SecurityEvent` |
-| `nexus-green-600` | `#1F9D63` | Sucesso, apólice emitida, controle que bloqueou ataque |
-
-**Tipografia** — `Inter` (interface) e `JetBrains Mono` (telas técnicas), ambas de licença livre.
-
-**Design system próprio** sobre Tailwind + shadcn/ui — escolha deliberada, porque os componentes
-shadcn são **copiados para o repositório** em vez de consumidos como dependência. O design system
-é de fato autoral e customizável, não uma casca sobre o visual de terceiros.
-
-**Modo laboratório** — quando a aplicação vulnerável está ativa, a UI recebe faixa diagonal âmbar
-com o rótulo `LAB VULNERÁVEL — DADOS SINTÉTICOS — REDE ISOLADA`.
+| # | Regra |
+|---|---|
+| 1 | `*.Domain` não referencia EF Core, ASP.NET, Serilog ou qualquer framework |
+| 2 | `*.Domain` não referencia `*.Application` nem `*.Infrastructure` |
+| 3 | Um módulo só referencia `<Outro>.Contracts` |
+| 4 | Não existem ciclos entre módulos |
+| 5 | O módulo `regulatory` não contém nenhum command handler |
+| 6 | Toda entidade `ITenantScoped` tem query filter configurado |
+| 7 | Nenhum agregado expõe coleção mutável pública |
+| 8 | Nenhum projeto de produção referencia a API vulnerável |
 
 ---
 
-## 3. O problema de negócio
+## 4. Arquitetura
 
-O corretor de seguros brasileiro opera fragmentado entre planilhas, portais distintos por
-seguradora, e-mail e WhatsApp. Isso produz quatro custos concretos:
-
-| # | Custo | Consequência |
-|---|---|---|
-| 1 | **Perda de receita** | Cotações expiram sem conversão; renovações se perdem por falta de alerta antecipado — e a renovação é a receita mais barata da carteira |
-| 2 | **Risco operacional** | Divergência entre comissão esperada e apurada, sem rastro da regra aplicada nem do valor-base que a originou |
-| 3 | **Risco de conformidade** | Dados pessoais manipulados sem registro de consentimento, sem finalidade declarada e sem trilha de quem acessou o quê (LGPD) |
-| 4 | **Opacidade regulatória** | A supervisão exige rastreabilidade ponta a ponta; sem auditoria estruturada, responder a um questionamento vira exportação manual de banco — lenta e, por si só, um incidente de privacidade |
-
-O NexusBroker ataca os quatro com **modelo de domínio rico**, **invariantes no agregado**,
-**isolamento multi-tenant com defesa em profundidade** e **auditoria como cidadã de primeira classe**.
-
----
-
-## 4. Usuários
-
-Dois perfis, e apenas dois.
-
-### 4.1 Corretor
-
-Usuário operacional. Opera exclusivamente dentro do tenant da sua corretora.
-
-Consulta e gere a carteira · cadastra e atualiza clientes · cadastra bens seguráveis · cria
-cotações · compara produtos e coberturas · converte cotações em propostas · anexa documentos ·
-acompanha propostas · consulta apólices · solicita endossos · acompanha renovações · consulta
-parcelas · consulta **as próprias** comissões · registra e acompanha sinistros · recebe
-notificações · consulta seu histórico · utiliza assistentes de IA.
-
-### 4.2 Usuário regulatório (simulação SUSEP)
-
-Supervisão **estritamente somente-leitura**, multi-tenant por escopo autorizado.
-
-Dados consolidados das corretoras · produtos e coberturas · propostas e apólices · indicadores
-operacionais e de conformidade · histórico de alterações · eventos de auditoria e de segurança ·
-rastreabilidade · consentimentos · indicadores de risco · verificação de isolamento entre
-corretoras · trilhas de auditoria · exportação de relatórios sintéticos · ciclo completo de uma
-proposta.
-
-**Toda operação obedece a:** RBAC · ABAC · escopo regulatório · finalidade de acesso · minimização
-de dados · registro de auditoria · mascaramento · controle por tenant · autorização por recurso ·
-menor privilégio.
-
-O perfil regulatório **não pode**: alterar apólice, comissão, proposta ou cliente; executar SQL;
-desabilitar auditoria; visualizar segredos; acessar dados fora do escopo. Cada proibição tem teste
-automatizado correspondente.
-
-### 4.3 Contas técnicas
-
-Funções de segurança, auditoria e administração existem como **capacidades internas**, não como
-personas: `Outbox Dispatcher`, `Renewal Scanner`, `Billing Scheduler`, `Quotation Expirer`,
-`Integrity Checker`, `AI Agent Runtime`. Toda ação de conta técnica é auditada com o mesmo rigor
-das ações humanas.
-
----
-
-## 5. Arquitetura
-
-**Monólito modular** com Clean Architecture dentro de cada módulo, portas e adaptadores na
-fronteira, DDD tático no núcleo, *vertical slices* na aplicação e CQRS **seletivo**.
+**Monólito modular** com Clean Architecture por módulo, portas e adaptadores na fronteira, DDD
+tático no núcleo, *vertical slices* na camada de aplicação e CQRS seletivo.
 
 ### Por que não microserviços
 
-O sistema tem 16 bounded contexts e a restrição declarada de ser **construído e mantido por uma
-pessoa**. As invariantes mais críticas (emissão de apólice com coberturas, parcelas, comissão,
-evento e auditoria) exigem atomicidade. Distribuí-las trocaria consistência forte por sagas,
-compensações e estados intermediários visíveis — complexidade real em troca de escalabilidade que
-este sistema não precisa.
+16 bounded contexts, mantidos por uma pessoa. As invariantes mais críticas — emissão de apólice
+com coberturas, parcelas, comissão, evento e auditoria — exigem atomicidade. Distribuí-las
+trocaria consistência forte por sagas, compensações e estados intermediários visíveis:
+complexidade real em troca de escalabilidade que este sistema não precisa.
 
-O monólito modular preserva as **fronteiras lógicas** de microserviços sem o custo operacional. E
-as fronteiras são verificadas por **teste arquitetural**, então não erodem — é a diferença entre um
-monólito modular e uma bola de lama. ([ADR-0002](docs/adr/0002-monolito-modular.md))
+O monólito modular preserva as fronteiras lógicas sem o custo operacional, e as fronteiras são
+verificadas por teste. ([ADR-0002](docs/adr/0002-monolito-modular.md))
 
-### C4 nível 2 — contêineres
+### Contêineres
 
 ```mermaid
 graph TB
-    U["👤 Corretor / Regulador"]
+    U["Corretor / Regulador"]
 
-    subgraph pub["Rede: nexus-frontend"]
-        FE["<b>frontend</b><br/>React · TypeScript · Vite<br/>:5173"]
+    subgraph pub["Rede: pdc-frontend"]
+        FE["<b>frontend</b><br/>React · Vite · :5173"]
     end
 
-    subgraph app["Rede: nexus-app (interna)"]
-        API["<b>secure-api</b><br/>ASP.NET Core 9<br/>monólito modular · :8080"]
+    subgraph app["Rede: pdc-app (interna)"]
+        API["<b>secure-api</b><br/>ASP.NET Core 9 · :8080"]
         AI["<b>ai-agent-service</b>"]
         WRK["<b>workers</b><br/>Outbox · Renewal · Billing"]
     end
 
-    subgraph dados["Rede: nexus-data (sem saída externa)"]
-        PG[("<b>secure-database</b><br/>PostgreSQL 16 · :5432<br/>RLS · particionamento")]
+    subgraph dados["Rede: pdc-data (sem saída externa)"]
+        PG[("<b>secure-database</b><br/>PostgreSQL 16 · :5432")]
         RD[("<b>redis</b> · :6379")]
     end
 
-    subgraph lab["Rede: nexus-lab (ISOLADA · profile security-lab)"]
-        VAPI["<b>vulnerable-api</b><br/>⚠️ falhas propositais"]
-        VPG[("<b>vulnerable-database</b><br/>⚠️ sem constraints, sem RLS")]
+    subgraph lab["Rede: pdc-lab (internal · profile security-lab)"]
+        VAPI["<b>vulnerable-api</b>"]
+        VPG[("<b>vulnerable-database</b>")]
         ATK["<b>attack-simulator</b>"]
     end
 
-    subgraph obs["Rede: nexus-observability"]
+    subgraph obs["Rede: pdc-observability"]
         OTEL["otel-collector"] --> PROM["prometheus"] & LOKI["loki"] & TEMPO["tempo"]
         GRAF["grafana · :3000"] --> PROM & LOKI & TEMPO
     end
@@ -233,8 +418,8 @@ graph TB
     API --> PG & RD & AI
     WRK --> PG
     API & AI & WRK -->|OTLP| OTEL
-    ATK -->|"ataca"| VAPI --> VPG
-    ATK -->|"replica o mesmo ataque"| API
+    ATK --> VAPI --> VPG
+    ATK -->|"replica o mesmo teste"| API
 
     classDef labc fill:#F2A93B,stroke:#B87A18,color:#141821
     classDef sec fill:#1F6FEB,stroke:#0B2447,color:#fff
@@ -242,54 +427,46 @@ graph TB
     class API,PG sec
 ```
 
-O `attack-simulator` é o único componente com rota para as duas redes — por construção, executa o
-cenário contra a versão vulnerável e **replica automaticamente** contra a segura. A rede
-`nexus-lab` é `internal: true`: o laboratório não alcança a internet.
-
 ### Camadas dentro de um módulo
 
 ```
-modules/policies/
-├── Domain/          ← entidades, VOs, eventos, specifications, portas
-│                      SEM EF Core · SEM ASP.NET · SEM Serilog
-├── Application/     ← casos de uso (vertical slices), DTOs, validators
-├── Infrastructure/  ← EF Core, Dapper, repositórios, adaptadores
-└── Contracts/       ← único assembly referenciável por outros módulos
+Infrastructure  →  Application  →  Domain
+      │                                ▲
+      └──────── implementa portas ─────┘
 ```
 
-A regra de dependência aponta **para dentro**. O domínio não conhece ninguém — é o que permite
-testar toda a lógica de negócio sem banco, sem HTTP e sem mock de framework.
+A regra de dependência aponta para dentro. O domínio não conhece ninguém — é o que permite testar
+toda a lógica de negócio sem banco, sem HTTP e sem mock de framework.
 
-### 16 Bounded Contexts
+### Bounded Contexts
 
 | Classe | Contextos |
 |---|---|
-| **Core Domain** | Quotations · Proposals · Policies · Commissions |
+| **Core** | Quotations · Proposals · Policies · Commissions |
 | **Supporting** | Customer Management · Broker Management · Product Catalog · Claims · Billing · Regulatory Supervision |
-| **Generic** | Identity and Access · Documents · Notifications · Audit and Compliance · Observability · Artificial Intelligence |
+| **Generic** | Identity and Access · Documents · Notifications · Audit and Compliance · Observability · AI |
 
-Mapa completo em [bounded-contexts.md](docs/architecture/bounded-contexts.md).
+[Mapa de contexto completo](docs/architecture/bounded-contexts.md)
 
-### Stack e trade-offs
+### Stack
 
 | Camada | Escolha | Racional |
 |---|---|---|
-| **Backend** | C# / .NET 9, ASP.NET Core (Minimal API), EF Core + Dapper, FluentValidation, Serilog, OpenTelemetry, Polly | Tipos fortes o bastante para expressar VOs e agregados; EF Core dá *owned types*, query filters globais e `xmin` nativo; Dapper entra onde o ORM não agrega (leitura analítica) |
-| **Frontend** | React, TypeScript, Vite, Tailwind, shadcn/ui, TanStack Query, React Hook Form + Zod, Storybook, Cytoscape.js, Mermaid, Monaco | Tipagem ponta a ponta; design system próprio no repositório; Cytoscape para o grafo do Database Explorer; Monaco para SQL e planos |
-| **Dados** | PostgreSQL 16, Redis | Justificado na [seção 7](#7-banco-objeto-relacional) |
-| **Mensageria** | **Nenhuma** — Outbox no PostgreSQL | Um broker externo não daria garantia transacional sem 2PC. Decisão registrada, não omissão ([ADR-0007](docs/adr/0007-sem-message-broker.md)) |
-| **Testes** | xUnit, FluentAssertions, FsCheck, Testcontainers, Respawn, NetArchTest | PostgreSQL **real** nos testes de integração — RLS, `EXCLUDE`, tipos compostos e `xmin` não existem em banco em memória |
-| **Infra** | Docker Compose, GitHub Actions, Prometheus, Grafana, Loki, Tempo | Ambiente completo em um comando; profile separado isola o laboratório |
+| **Backend** | .NET 9, ASP.NET Core (Minimal API), EF Core, Dapper, FluentValidation, Serilog, OpenTelemetry, Polly | Tipos fortes o bastante para expressar Value Objects e agregados; EF Core fornece *owned types*, query filters globais e `xmin` nativo; Dapper entra em leitura analítica, onde o ORM não agrega |
+| **Frontend** | React, TypeScript, Vite, Tailwind, shadcn/ui, TanStack Query, React Hook Form + Zod, Storybook, Cytoscape.js, Monaco | Tipagem ponta a ponta; componentes shadcn ficam no repositório, então o design system é próprio; Cytoscape para o grafo do Database Explorer; Monaco para SQL e planos de execução |
+| **Dados** | PostgreSQL 16, Redis | Detalhado na [seção 6](#6-banco-objeto-relacional) |
+| **Mensageria** | Nenhuma — Outbox no PostgreSQL | Broker externo não oferece garantia transacional sem 2PC ([ADR-0007](docs/adr/0007-sem-message-broker.md)) |
+| **Testes** | xUnit, FluentAssertions, FsCheck, Testcontainers, Respawn, NetArchTest | PostgreSQL real nos testes de integração: RLS, `EXCLUDE`, tipos compostos e `xmin` não existem em banco em memória |
+| **Infra** | Docker Compose, GitHub Actions, Prometheus, Grafana, Loki, Tempo | Ambiente completo em um comando |
 
-Alternativas descartadas em [overview.md](docs/architecture/overview.md).
+[Alternativas descartadas e trade-offs](docs/architecture/overview.md)
 
 ---
 
-## 6. Modelo de domínio
+## 5. Modelo de domínio
 
-**Princípio inegociável: modelo rico.** Não existe classe que seja apenas um saco de `get`/`set`.
-Toda regra vive na entidade, no agregado ou em um serviço de domínio — nunca no controller, nunca
-no repositório.
+Rich Domain Model: as regras vivem na entidade, no agregado ou em serviços de domínio — não no
+controller nem no repositório.
 
 ### Agregados
 
@@ -311,7 +488,7 @@ Claim (root)
  ├── Damages                  └── StatusHistory [append-only]
 ```
 
-### Herança e polimorfismo — aplicados, não decorativos
+### Herança e polimorfismo
 
 ```mermaid
 classDiagram
@@ -328,52 +505,31 @@ classDiagram
     InsurableAsset <|-- Property
 ```
 
-O motor de precificação consome `asset.RiskFactors()` **sem conhecer o tipo concreto**.
-Acrescentar um novo tipo de bem exige uma subclasse e um valor de enum — **nenhum `switch`
-existente muda**. Open/Closed Principle sendo estrutural, não retórico.
+O motor de precificação consome `asset.RiskFactors()` sem conhecer o tipo concreto. Adicionar um
+novo tipo de bem exige uma subclasse e um valor de enum — nenhum `switch` existente muda.
 
-### Value Objects — 19 implementados e testados
+**Persistência da herança:** TPH para `Customer` (atributos compartilhados, consultas
+polimórficas frequentes) e TPT para `InsurableAsset` (atributos divergentes, `NOT NULL` por tipo).
+([ADR-0005](docs/adr/0005-estrategia-de-heranca-tph-e-tpt.md))
+
+### Value Objects
+
+19 implementados, todos imutáveis, autovalidados, com igualdade por valor e testes próprios:
 
 `Money` · `Percentage` · `CommissionRate` · `DocumentNumber` · `EmailAddress` · `PhoneNumber` ·
 `PostalCode` · `StateCode` · `PostalAddress` · `DateRange` · `PolicyNumber` · `ProposalNumber` ·
 `QuotationNumber` · `RiskScore` · `CoverageLimit` · `Deductible` · `TenantId` · `CorrelationId` ·
 `IdempotencyKey`
 
-Todos: imutáveis · autovalidados · igualdade por valor · sem *primitive obsession* · persistidos
-corretamente · conversões explícitas · testados.
-
-### O contraste que o case demonstra
-
-**❌ Modelo anêmico** (`vulnerable-api`) — cada chamador precisa lembrar de validar:
-
-```csharp
-public class Policy {
-    public Guid TenantId { get; set; }     // alterável de fora → cross-tenant
-    public string Status { get; set; }     // qualquer string vira status
-    public decimal Premium { get; set; }   // pode ser negativo
-    public List<Coverage> Coverages { get; set; }   // mutável por qualquer um
-}
-
-[HttpPost("issue")]
-public IActionResult Issue(IssueDto dto) {
-    var p = new Policy { TenantId = dto.TenantId, Status = "ACTIVE", Premium = dto.Premium };
-    _db.Policies.Add(p);      // sem invariante, sem lock, sem auditoria
-    _db.SaveChanges();
-    return Ok(p);             // expõe a entidade diretamente
-}
-```
-
-**✅ Modelo rico** (`secure-api`) — o estado inválido é **inalcançável**:
-
 ```csharp
 public sealed class Policy : AggregateRoot<PolicyId> {
     private readonly List<PolicyCoverage> _coverages = [];
 
-    public PolicyStatus Status { get; private set; }          // enum, setter privado
-    public Money TotalPremium { get; private set; }           // VO validado
+    public PolicyStatus Status { get; private set; }        // enum, setter privado
+    public Money TotalPremium { get; private set; }         // Value Object validado
     public IReadOnlyCollection<PolicyCoverage> Coverages => _coverages.AsReadOnly();
 
-    private Policy() { }                                      // só para o ORM
+    private Policy() { }                                    // materialização pelo ORM
 
     public static Policy Issue(Proposal proposal, UnderwritingDecision decision,
                                PolicyNumber number, DateRange period, IClock clock) {
@@ -381,61 +537,56 @@ public sealed class Policy : AggregateRoot<PolicyId> {
             throw new DomainException(ErrorCodes.ProposalNotApproved, ...);
         if (proposal.HasOpenPendencies)
             throw new DomainException(ErrorCodes.ProposalHasPendencies, ...);
-        // ... único caminho de criação de apólice no sistema
+        // único caminho de criação de apólice no sistema
     }
 }
 ```
 
-📄 [Modelo de domínio](docs/domain/domain-model.md) · [Agregados](docs/domain/aggregates.md) ·
+Não existe caminho de código que produza uma apólice com prêmio negativo ou status inválido.
+
+[Modelo completo](docs/domain/domain-model.md) · [Agregados e invariantes](docs/domain/aggregates.md) ·
 [Value Objects](docs/domain/value-objects.md)
 
 ---
 
-## 7. Banco objeto-relacional
+## 6. Banco objeto-relacional
 
-**O entregável central do case.**
+### Recursos do PostgreSQL utilizados
 
-### Por que PostgreSQL
-
-| Recurso | Uso concreto |
+| Recurso | Uso |
 |---|---|
-| **ACID** | Emissão confirma proposta, apólice, coberturas, parcelas, comissão, evento e auditoria em **uma** transação |
-| **Tipos compostos** | `money_amount`, `postal_address`, `deductible` — VOs persistidos como unidade coesa |
+| **Tipos compostos** | `money_amount`, `postal_address`, `deductible` — Value Objects persistidos como unidade coesa |
 | **Domains** | `cpf_digits`, `cnpj_digits`, `uf_code`, `postal_code` — validação reutilizável por tipo |
-| **`daterange` + `btree_gist`** | `EXCLUDE` impede sobreposição de vigência — invariante **impossível** de expressar com `UNIQUE` |
-| **RLS com `FORCE`** | Isolamento multi-tenant na camada mais profunda, aplicado inclusive ao dono da tabela |
-| **Índices parciais** | A Outbox pode ter milhões de linhas processadas e um índice de centenas |
-| **GIN + `pg_trgm` + FTS** | Busca de cliente por nome, com tolerância a erro de digitação |
+| **Enums** | 16 tipos para conjuntos fechados pelo código |
+| **`daterange` + `btree_gist`** | `EXCLUDE` impede sobreposição de vigência — invariante que `UNIQUE` não expressa |
+| **RLS com `FORCE`** | Isolamento por tenant aplicado inclusive ao dono da tabela |
+| **Índices parciais** | A Outbox mantém índice pequeno mesmo com milhões de linhas processadas |
+| **GIN + `pg_trgm` + FTS** | Busca textual com tolerância a erro de digitação |
+| **Colunas geradas** | `risk_band` derivada do escore; `search_vector` para full-text |
 | **Particionamento** | `audit_events`, `security_events`, `outbox_messages` por mês |
-| **`xmin`** | Optimistic locking nativo, sem coluna extra que alguém possa esquecer de atualizar |
+| **`xmin`** | Optimistic locking nativo, sem coluna extra que possa ser esquecida em um `UPDATE` |
 | **`SKIP LOCKED`** | Outbox consumida por múltiplos workers sem contenção |
-| **`EXPLAIN (ANALYZE, BUFFERS)`** | Alimenta o Query Inspector com plano **real**, nunca estimado |
+| **`pg_stat_statements`** | Planos e estatísticas reais para o Query Inspector |
 
-**Alternativas descartadas:** MySQL (sem RLS, sem tipos compostos, sem `EXCLUDE` — metade das
-demonstrações seria impossível); SQL Server (licenciamento atrapalha um case aberto em containers);
-MongoDB (o domínio é intensamente relacional e transacional).
-([ADR-0003](docs/adr/0003-postgresql-como-banco-objeto-relacional.md))
+[Justificativa da escolha e alternativas](docs/adr/0003-postgresql-como-banco-objeto-relacional.md)
 
-### O que vai onde
+### Critério de modelagem
 
 | Camada | Conteúdo | Exemplo |
 |---|---|---|
-| **Relacional normalizado** | Toda entidade com identidade, ciclo de vida ou integridade referencial | `policies`, `policy_coverages`, `installments` |
-| **Tipo composto** | VO multi-campo reutilizado em várias tabelas | `money_amount` |
-| **Domain** | VO de campo único com validação reutilizável | `cpf_digits` |
-| **Coluna com conversor** | VO de campo único específico do agregado | `policy_number` |
-| **JSONB** | Estrutura **genuinamente variável**, sem integridade referencial | `risk_profiles.answers` |
-| **Coluna gerada** | Derivação determinística que precisa de índice | `risk_band`, `search_vector` |
+| Relacional normalizado | Entidade com identidade, ciclo de vida ou integridade referencial | `policies`, `policy_coverages`, `installments` |
+| Tipo composto | Value Object multi-campo reutilizado | `money_amount` |
+| Domain | Value Object de campo único com validação reutilizável | `cpf_digits` |
+| Conversor de valor | Value Object de campo único do agregado | `policy_number` |
+| JSONB | Estrutura genuinamente variável, sem integridade referencial | `risk_profiles.answers` |
+| Coluna gerada | Derivação determinística que precisa de índice | `risk_band` |
 
-**Critério para JSONB** — permitido apenas quando as três valem: (1) o esquema varia legitimamente
-entre instâncias; (2) o dado não participa de integridade referencial; (3) as consultas são por
-chave, não junções frequentes. Um teste arquitetural exige o comentário
-`-- JSONB-JUSTIFICATION:` na migration. **Coberturas, parcelas e comissões não são JSONB** — têm
-identidade, FK e agregação.
+**JSONB** é permitido apenas quando: o esquema varia legitimamente entre instâncias, o dado não
+participa de FK, e as consultas são por chave em vez de junções frequentes. Um teste arquitetural
+exige o comentário `-- JSONB-JUSTIFICATION:` na migration. Coberturas, parcelas e comissões **não**
+são JSONB — têm identidade, FK e agregação.
 
-### Cada invariante do domínio tem um par no banco
-
-**Este é o argumento central do case.**
+### Invariantes do domínio replicadas no banco
 
 | Invariante | Mecanismo | Nome |
 |---|---|---|
@@ -446,20 +597,18 @@ identidade, FK e agregação.
 | Documento único por tenant | Índice único parcial | `ux_customers_tenant_document` |
 | Campos coerentes com o tipo (TPH) | Check constraint | `ck_customers_individual_fields` |
 | Herança consistente (TPT) | FK composta `(id, kind)` | `ux_assets_kind` |
-| Regulador nunca tem tenant | Check constraint | `ck_users_tenant_by_profile` |
-| MFA obrigatório para regulador | Check constraint | `ck_users_regulator_requires_mfa` |
+| Perfil regulatório sem tenant | Check constraint | `ck_users_tenant_by_profile` |
+| MFA obrigatório na supervisão | Check constraint | `ck_users_regulator_requires_mfa` |
 | Auditoria imutável | `REVOKE UPDATE, DELETE` + trigger | `tg_audit_immutable` |
-| Isolamento entre corretoras | RLS com `FORCE` | `p_*_tenant_isolation` |
+| Isolamento por tenant | RLS com `FORCE` | `p_*_tenant_isolation` |
 | Concorrência na emissão | Optimistic lock nativo | `xmin` |
 
-O domínio impede que a **aplicação** crie estado inválido. O banco impede que **qualquer coisa**
-crie — inclusive um script manual, uma migration errada ou a API vulnerável do laboratório.
-
-### A invariante que só o PostgreSQL expressa
+O domínio impede que a aplicação crie estado inválido. O banco impede que **qualquer coisa** crie
+— inclusive um script manual ou uma migration mal escrita.
 
 ```sql
--- Duas apólices ativas para o mesmo bem, no mesmo produto, com vigências que se cruzam,
--- é um estado impossível no negócio. UNIQUE não alcança: sobreposição não é igualdade.
+-- Duas apólices ativas para o mesmo bem, no mesmo produto, com vigências que se
+-- cruzam é um estado impossível. UNIQUE não alcança: sobreposição não é igualdade.
 ALTER TABLE policies ADD CONSTRAINT ex_policies_no_overlap
     EXCLUDE USING gist (
         tenant_id          WITH =,
@@ -469,9 +618,7 @@ ALTER TABLE policies ADD CONSTRAINT ex_policies_no_overlap
     ) WHERE (status = 'ACTIVE');
 ```
 
-É a mesma regra do método `DateRange.Overlaps()` do domínio — agora também garantida pelo banco.
-
-### Diagrama ER
+### Modelo entidade-relacionamento
 
 ```mermaid
 erDiagram
@@ -493,25 +640,18 @@ erDiagram
     BROKERS     ||--o{ COMMISSIONS      : "recebe"
 ```
 
-📄 [Modelo físico](docs/database/physical-model.md) · [ER detalhado](docs/database/er-diagram.md)
+[Modelo físico detalhado](docs/database/physical-model.md) · [ER completo](docs/database/er-diagram.md)
 
----
-
-## 8. Fluxos de negócio
-
-### Emissão de apólice — os 24 passos observáveis
-
-Cada passo é clicável no Live Processing Console, revelando camada, classe, método, estado
-anterior e posterior, query, índice, duração, controle de segurança, teste relacionado e ADR.
+### Emissão de apólice — transação e observabilidade
 
 ```
 [01] Requisição recebida              [13] PolicyCoverages congeladas do snapshot
 [02] Correlation ID criado            [14] Commission apurada (regra versionada)
 [03] Token validado                   [15] Domain Event produzido
-[04] Perfil identificado              [16] OutboxMessage persistida (MESMA transação)
+[04] Perfil identificado              [16] OutboxMessage persistida (mesma transação)
 [05] Tenant resolvido do claim        [17] AuditEvent registrado
-[06] SET LOCAL app.tenant_id → RLS    [18] Proposta → ISSUED
-[07] Autorização por recurso          [19] ✅ COMMIT — atômico
+[06] SET LOCAL app.tenant_id          [18] Proposta → ISSUED
+[07] Autorização por recurso          [19] COMMIT
 [08] Idempotency-Key verificada       [20] Cache invalidado
 [09] Proposal carregada com xmin      [21] Outbox Dispatcher publicou
 [10] Invariantes verificadas          [22] Notificação criada
@@ -519,574 +659,250 @@ anterior e posterior, query, índice, duração, controle de segurança, teste r
 [12] Policy criada · PolicyNumber     [24] Trace concluído
 ```
 
-### O cenário obrigatório: emissão concorrente
+Cada passo é inspecionável no Live Processing Console, com camada, classe, método, estado
+anterior e posterior, query, índice e duração.
 
-Dois processos tentam emitir apólice para a mesma proposta, simultaneamente.
+### Controle de concorrência
 
-| | Versão vulnerável | Versão segura |
-|---|---|---|
-| **Resultado** | ❌ Duas apólices, comissão duplicada | ✅ Exatamente uma apólice |
-| **Por quê** | Sem lock, sem constraint, sem idempotência | Três camadas independentes |
-
-Na versão segura o perdedor falha no **optimistic lock** (`xmin` divergente); se passasse,
-esbarraria no **índice único** `ux_policies_proposal`; se a requisição fosse repetida, a
-**`Idempotency-Key`** devolveria a resposta original. O Security Lab **derruba uma camada de cada
-vez** e mostra a seguinte segurando.
-
-### Demais fluxos
-
-**Cliente** — pesquisa · cadastro PF/PJ · atualização · contatos · endereços · consentimentos LGPD
-(*append-only*) · bens seguráveis · histórico · linha do tempo.
-
-**Cotação** — cliente → produto → bem → questionário de risco → coberturas → elegibilidade
-(Specifications) → cálculo simulado de 3 planos → comparação → `CalculationSnapshot` imutável →
-evento → auditoria.
-
-**Proposta** — conversão → validação → documentos (validação por *magic bytes*) → pendências →
-underwriting simulado → decisão imutável → auditoria.
-
-**Comissão** — prevista → liberada → paga (simulada) → estornada. Registra `rule_id`,
-`rule_version`, `rate_applied` e `base_amount`: a pergunta *"por que essa comissão é esse valor?"*
-permanece respondível anos depois. Estorno é lançamento inverso, nunca `UPDATE` destrutivo.
-
-**Renovação** — detecção automática (índice parcial) → notificação → nova cotação vinculada →
-diff de coberturas → aceite ou recusa registrados.
-
-**Sinistro** — aviso (data dentro da vigência, invariante) → eventos *append-only* → documentos →
-pendências → decisão e valores **simulados**, rotulados como tal.
-
-📄 [Casos de uso completos](docs/architecture/use-cases.md)
+Duas requisições simultâneas de emissão para a mesma proposta encontram três camadas
+independentes: o **optimistic lock** (`xmin` divergente faz o `UPDATE` afetar zero linhas), o
+**índice único** `ux_policies_proposal`, e a **chave de idempotência**, que devolve a resposta
+original em caso de replay. Resultado: exatamente uma apólice.
 
 ---
 
-## 9. Segurança
+## 7. Segurança de aplicação
 
-### Defesa em profundidade multi-tenant — 5 camadas
+### Isolamento multi-tenant em cinco camadas
 
 ```mermaid
 graph LR
     R["Requisição"] --> L1 --> L2 --> L3 --> L4 --> L5 --> DB[(dados)]
-    L1["<b>1. Claim do token</b><br/>tenant vem do<br/>JWT assinado"]
-    L2["<b>2. Contexto imutável</b><br/>fixado no escopo<br/>da requisição"]
-    L3["<b>3. Query filter</b><br/>filtro global<br/>do ORM"]
+    L1["<b>1. Claim</b><br/>tenant do<br/>JWT assinado"]
+    L2["<b>2. Contexto</b><br/>imutável na<br/>requisição"]
+    L3["<b>3. Query filter</b><br/>global do<br/>ORM"]
     L4["<b>4. Autorização</b><br/>por recurso<br/>RBAC + ABAC"]
     L5["<b>5. RLS</b><br/>FORCE ROW<br/>LEVEL SECURITY"]
     classDef l fill:#DCE9FD,stroke:#1F6FEB,color:#0B2447
     class L1,L2,L3,L4,L5 l
 ```
 
-**A camada 1 começa no sistema de tipos.** O VO `TenantId` não tem construtor público que aceite
-entrada de usuário:
+A camada 1 é garantida pelo **sistema de tipos**: o Value Object `TenantId` não tem construtor
+público que aceite entrada de usuário.
 
 ```csharp
 public readonly record struct TenantId {
     public Guid Value { get; }
     private TenantId(Guid value) => Value = value;
 
-    // ÚNICA origem: claim autenticado ou leitura do banco.
-    // Não existe overload público que aceite string vinda de requisição.
+    // Única origem: claim autenticado ou leitura do banco.
     public static TenantId FromTrustedSource(Guid value) => ...;
 }
 ```
 
-Um DTO de requisição **não consegue** produzir um `TenantId` válido. Manipulação de tenant via
-payload fica impedida por **tipagem**, não por validação que alguém pode esquecer de chamar. Há
-teste arquitetural que quebra o build se surgir um overload público.
+Um DTO de requisição não consegue produzir um `TenantId` válido — a manipulação via payload é
+impedida por tipagem, não por validação que pode ser esquecida. Há teste arquitetural que falha o
+build se um overload público for adicionado.
 
-**A camada 5 usa `FORCE`.** Sem ele, o dono da tabela ignora as políticas — é o detalhe que
-transforma "temos RLS" em falsa sensação de segurança.
+A camada 5 usa `FORCE ROW LEVEL SECURITY`: sem ele, o usuário dono da tabela ignora as políticas.
 
 ```sql
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE customers FORCE  ROW LEVEL SECURITY;   -- ← aplica inclusive ao dono
+ALTER TABLE customers FORCE  ROW LEVEL SECURITY;
 ```
 
-**A prova:** o teste de isolamento desativa a camada 3 e demonstra que a 5 bloqueia; depois
-desativa a 5 e mostra a 3 e a 4 bloqueando.
-([ADR-0004](docs/adr/0004-defesa-em-profundidade-multitenant.md))
+Além do tenant, `commissions` tem política **restritiva** por `broker_id`: um corretor não acessa
+a comissão de outro, mesmo dentro do próprio tenant.
 
-### Segurança por padrão nos Value Objects
+[ADR-0004](docs/adr/0004-defesa-em-profundidade-multitenant.md)
+
+### Tratamento de dados sensíveis
 
 ```csharp
-// ToString() retorna a forma MASCARADA — interpolação acidental em log não vaza o dado.
+// ToString() retorna a forma mascarada — interpolação acidental em log não expõe o dado
 DocumentNumber.Parse("52998224725").ToString()   // "***.***.247-**"
 
-// A exceção NUNCA ecoa o valor recebido — mensagens que imprimem o dado
-// são vetor clássico de vazamento de dado pessoal em log agregado.
+// A exceção não ecoa o valor recebido
 DocumentNumber.Parse("12345678901")   // DomainException: "Documento inválido."
 
-// Busca por hash com pepper fora do banco: o dump vazado não permite
-// força bruta sobre o espaço (pequeno) de CPFs.
+// Busca por HMAC com pepper mantido fora do banco
 document.SearchHash(pepper)
 ```
 
-### Attack Simulator — 18 cenários
+O documento é cifrado em repouso com chave fornecida por contexto de sessão a partir de um segredo
+externo — a função de decifragem falha fechado quando a chave não está presente.
 
-SQL Injection · IDOR · Broken Access Control · Manipulação de TenantId · Mass Assignment ·
-Enumeração de clientes · Acesso a apólice de outra corretora · Comissão de outro corretor ·
-Exposição excessiva · Falta de rate limiting · Stored XSS · CSRF · Upload inseguro · Race
-condition · Emissão duplicada · Alteração indevida de comissão · Acesso indevido a documento ·
-Manipulação de status de proposta.
+### Privilégios de banco
 
-Cada execução apresenta: requisição · endpoint · parâmetro · payload laboratorial · usuário ·
-perfil · tenant · query · resposta · resultado · **controle que falhou** · **controle que
-bloqueou** · log · trace · `SecurityEvent` · auditoria · **CWE** · **OWASP** · **ASVS** · teste
-automatizado relacionado.
+| Papel | Permissões |
+|---|---|
+| `nexus_migrator` | DDL, usado apenas pelas migrations |
+| `app_user` | DML no tenant; sem DDL, sem `DELETE`, sem `BYPASSRLS` |
+| `app_worker` | Outbox e jobs, escopo restrito |
+| `app_regulator` | `SELECT` apenas nas views mascaradas; sem acesso às tabelas base |
 
-Após rodar contra a versão vulnerável, o mesmo cenário é **replicado automaticamente** contra a
-segura:
+`DELETE` físico é revogado da aplicação — a exclusão é lógica, com motivo obrigatório e cascata
+aplicada pelo agregado.
 
-```
-Cenário: corretor tenta consultar apólice de outra corretora
+### Superfície de teste de segurança
 
-Vulnerável:  GET /api/policies/1002  →  200 OK  ❌ dados retornados indevidamente
-Segura:      GET /api/policies/1002  →  404 Not Found  ✅
+O `attack-simulator` executa 18 cenários (SQL Injection, IDOR, broken access control, manipulação
+de tenant, mass assignment, race condition, emissão duplicada, upload inseguro, entre outros)
+contra a API vulnerável e replica cada um contra a segura, registrando o controle que atuou, o
+`SecurityEvent` gerado e o mapeamento para CWE, OWASP e ASVS.
 
-Controles que atuaram: autorização por recurso · tenant isolation · query filter ·
-                       Row-Level Security · auditoria · SecurityEvent
-```
-
-> **404, não 403** — deliberado. Responder `403` confirmaria que o recurso existe, o que
-> transforma o controle de acesso em oráculo de enumeração.
-
-### Isolamento do laboratório vulnerável
-
-Profile Docker dedicado · rede `internal: true` (sem rota externa) · banco separado · limites de
-CPU e memória · reset automático · aviso visual permanente · **ausente do GitHub Pages** · teste
-arquitetural que falha o build se um projeto de produção referenciar a API vulnerável ·
-verificação no CI. ([ADR-0009](docs/adr/0009-laboratorio-vulneravel-isolado.md))
-
-### Governança dos agentes de IA
-
-Todo agente executa **sob a identidade e o tenant do usuário**, nunca com conta de serviço
-privilegiada. Conteúdo recuperado do banco entra no contexto como **dado delimitado, nunca como
-instrução** — defesa contra prompt injection, com cenário no Attack Simulator que injeta payload
-em campo sintético e verifica que o agente não obedece.
-([ADR-0010](docs/adr/0010-governanca-de-agentes-de-ia.md))
+O ambiente vulnerável é isolado por profile Docker, em rede `internal: true`, com reset automático
+e limites de recurso. ([ADR-0009](docs/adr/0009-laboratorio-vulneravel-isolado.md))
 
 ---
 
-## 10. Telas e laboratórios
+## 8. Observabilidade
 
-### Operação
+OpenTelemetry ponta a ponta (traces, métricas, logs) via OTel Collector para Prometheus, Loki e
+Tempo, visualizados no Grafana. Correlation ID propagado do frontend até o banco.
 
-**Autenticação** (login, MFA TOTP, sessões ativas, histórico) · **Dashboard do corretor** ·
-**Dashboard regulatório** · **Clientes** (listagem, busca, perfil, contatos, endereços,
-consentimentos, bens, linha do tempo) · **Cotações** (questionário, coberturas, comparação de
-planos) · **Propostas** (documentos, pendências, análise) · **Apólices** (vigência, coberturas,
-parcelas, endossos, renovação) · **Comissões** (extrato, consolidação mensal) · **Sinistros**.
-
-### Laboratórios técnicos
-
-| Tela | O que demonstra |
+| Categoria | Métricas |
 |---|---|
-| **Live Processing Console** | Eventos em tempo real via SSE, 14 filtros e 16 categorias. Mascaramento e redação automáticos — senha, token, cookie, documento e segredo nunca aparecem |
-| **Database Explorer** | Grafo navegável lido do **catálogo real**: tabelas, relações, cardinalidades, agregados, mapeamento ORM, índices, constraints, RLS, partições, views |
-| **Query Inspector** | SQL real, parâmetros mascarados, tempo, linhas, `EXPLAIN (ANALYZE, BUFFERS)`, índice utilizado, tipo de scan, origem no código, correlation ID |
-| **Transaction Inspector** | Ciclo de vida das transações: duração, isolamento, locks, `COMMIT`/`ROLLBACK`, eventos, Outbox, auditoria |
-| **Data Browser** | Consulta interativa aos dados reais — filtros tipados, ordenação, navegação por FK. **Sem SQL livre**: o filtro vira consulta parametrizada gerada pelo servidor a partir de whitelist |
-| **Engineering Lab** | Comparativos medidos: ORM vs Dapper · com/sem índice · N+1 vs projeção · lazy vs eager · paginado vs não paginado |
-| **Security Lab** | Os 18 cenários contra as duas versões, com o controle nomeado |
-| **Recruiter Mode** | Jornada guiada de 10–15 minutos, 20 passos, focada no **banco** |
+| **Negócio** | Apólices emitidas, propostas aprovadas, comissões calculadas, eventos de domínio |
+| **Performance** | Latência de query (média, p95, p99), queries por operação, N+1 detectadas, sequential scans, cache hit/miss, tempo de transação, locks, deadlocks, throughput |
+| **Integridade** | `constraint_violations_total`, `optimistic_lock_conflicts_total`, `outbox_pending_age_seconds`, `audit_coverage_ratio`, `tenant_violation_attempts_total`, `integrity_check_failures_total` |
 
-> **Nenhum número de performance é inventado.** Todos vêm de `EXPLAIN (ANALYZE, BUFFERS)` e de
-> medição real do ambiente local, publicados junto com a especificação da máquina, a versão do
-> PostgreSQL e a massa de dados utilizada.
-
-**Por que o Data Browser não tem campo de SQL livre:** seria a forma mais rápida de demonstrar o
-banco e a mais irresponsável de construir a aplicação — transformaria a tela em execução remota
-contra o banco. SQL livre existe **apenas** na `vulnerable-api`, como cenário de SQL Injection.
+A função `app.run_integrity_checks()` executa 10 asserções SQL sobre a base — soma de parcelas,
+apólice sem cobertura, prêmio divergente, apólice duplicada por proposta, comissão sem regra,
+bem sem subtipo, sinistro fora da vigência, cliente sem contato, Outbox travada e emissão sem
+auditoria correspondente. Se o modelo estiver correto, todas retornam zero.
 
 ---
 
-## 11. Observabilidade
-
-OpenTelemetry ponta a ponta (traces, métricas, logs) via OTel Collector → Prometheus, Loki, Tempo,
-Grafana. Correlation ID propagado do frontend até o banco.
-
-**Métricas de negócio** — apólices emitidas · propostas aprovadas · comissões calculadas ·
-eventos de domínio · operações regulatórias.
-
-**Métricas de performance** — latência de query (média, p95, p99) · queries por operação ·
-N+1 detectadas · sequential scans · cache hit/miss · tempo de transação · locks · deadlocks ·
-taxa de erro · throughput.
-
-**Métricas de integridade** — a categoria que costuma faltar:
-
-| Métrica | O que revela |
-|---|---|
-| `constraint_violations_total{constraint,table}` | Qual invariante o banco precisou barrar — e se a aplicação está deixando passar |
-| `optimistic_lock_conflicts_total{aggregate}` | Contenção real por agregado |
-| `outbox_pending_age_seconds` | Atraso do processamento assíncrono (alerta > 60 s) |
-| `audit_coverage_ratio` | Proporção de escritas com `AuditEvent` correspondente — **meta: 1.0** |
-| `tenant_violation_attempts_total` | Tentativas de acesso cross-tenant |
-| `integrity_check_failures_total` | Falhas da verificação diária (órfãos, Σ parcelas ≠ prêmio, apólice sem cobertura) |
-
-Um worker diário roda asserções SQL sobre a base inteira. **A integridade deixa de ser presumida e
-passa a ser medida.**
-
----
-
-## 12. Como executar localmente
-
-### 12.1 Pré-requisitos
-
-| Ferramenta | Versão | Verificar | Obter |
-|---|---|---|---|
-| **.NET SDK** | 9.0+ | `dotnet --version` | [download](https://dotnet.microsoft.com/download/dotnet/9.0) |
-| **Docker Desktop** | 24+ | `docker --version` | [download](https://www.docker.com/products/docker-desktop/) |
-| **Docker Compose** | v2 | `docker compose version` | incluído no Docker Desktop |
-| **Node.js** | 20+ | `node --version` | [download](https://nodejs.org/) |
-| **Git** | 2.40+ | `git --version` | [download](https://git-scm.com/) |
-
-> **Windows:** o Docker Desktop precisa estar com o WSL 2 habilitado e **em execução** antes dos
-> comandos abaixo. Os comandos funcionam em PowerShell, Git Bash ou WSL.
-
-### 12.2 Clonar e configurar segredos
-
-```bash
-git clone https://github.com/volksec/0009098.git && cd 0009098
-```
-
-Nenhuma credencial é versionada — nem de desenvolvimento. Crie os arquivos locais a partir dos
-exemplos:
-
-```bash
-cp .env.example .env
-```
-
-```bash
-cp infrastructure/secrets/db_password.txt.example infrastructure/secrets/db_password.txt
-```
-
-Edite os dois arquivos com valores próprios. O Compose **falha explicitamente** se as variáveis
-não estiverem definidas — falha fechado, em vez de subir com um padrão inseguro.
-
-### 12.3 Subir a infraestrutura (PostgreSQL + Redis)
-
-```bash
-docker compose up -d secure-database redis
-```
-
-Aguarde o healthcheck ficar saudável:
-
-```bash
-docker compose ps
-```
-
-Você deve ver `nexus-secure-db` e `nexus-redis` com status `healthy`. Se o banco não subir,
-verifique o log:
-
-```bash
-docker compose logs secure-database
-```
-
-### 12.4 Aplicar migrations e carregar a massa sintética
-
-```bash
-dotnet run --project tools/NexusBroker.DbMigrator -- migrate
-```
-
-```bash
-dotnet run --project tools/NexusBroker.DbMigrator -- seed
-```
-
-O `seed` gera a massa de referência de forma **determinística** (seed fixa), então qualquer
-avaliador reproduz exatamente a mesma base — o que torna os benchmarks comparáveis:
-
-| Tabela | Volume |
-|---|---|
-| Corretoras (tenants) | 8 |
-| Corretores | 40 |
-| Clientes | 25.000 |
-| Bens seguráveis | 38.000 |
-| Cotações | 60.000 |
-| Propostas | 22.000 |
-| Apólices | 14.000 |
-| Parcelas | 84.000 |
-| Comissões | 14.000 |
-| Sinistros | 1.800 |
-| Eventos de auditoria | 400.000 |
-
-> O volume é deliberado: com 500 linhas, tudo é rápido e a comparação "com índice × sem índice"
-> não prova nada. Todos os CPFs e CNPJs têm dígito verificador válido e vêm de faixas reservadas
-> para teste, sem colisão com documentos reais.
-
-Para recomeçar do zero:
-
-```bash
-dotnet run --project tools/NexusBroker.DbMigrator -- reset
-```
-
-### 12.5 Subir o backend
-
-```bash
-dotnet run --project apps/secure-api
-```
-
-A API sobe em **http://localhost:8080**.
-
-| Endereço | Conteúdo |
-|---|---|
-| http://localhost:8080/swagger | Documentação interativa da API |
-| http://localhost:8080/health/live | Liveness |
-| http://localhost:8080/health/ready | Readiness (verifica banco, cache e migrations) |
-| http://localhost:8080/api/events/stream | Stream SSE do Live Processing Console |
-
-Em outro terminal, suba os workers (Outbox Dispatcher, Renewal Scanner, Billing Scheduler):
-
-```bash
-dotnet run --project apps/workers
-```
-
-> Sem os workers a aplicação continua funcionando, mas a Outbox não é despachada — notificações
-> não chegam e o passo [21] da timeline de emissão fica pendente. É, aliás, uma boa forma de
-> **ver a Outbox acumulando** no Transaction Inspector.
-
-### 12.6 Subir o frontend
-
-Em outro terminal:
-
-```bash
-cd apps/frontend && npm install
-```
-
-```bash
-npm run dev
-```
-
-O frontend sobe em **http://localhost:5173** e já aponta para `http://localhost:8080` via
-`apps/frontend/.env.development`. Se o backend estiver em outra porta, ajuste `VITE_API_BASE_URL`.
-
-### 12.7 Credenciais de demonstração
-
-Usuários **sintéticos**, criados pelo `seed`, existentes apenas no ambiente local:
-
-| Perfil | E-mail | Senha | Observação |
-|---|---|---|---|
-| Corretor (tenant A) | `ana.souza@corretoraalfa.test` | `Demo@2026!` | Carteira própria |
-| Corretor (tenant A) | `bruno.lima@corretoraalfa.test` | `Demo@2026!` | Usado para provar que um corretor não vê a comissão do outro |
-| Corretor (tenant B) | `carla.dias@corretorabeta.test` | `Demo@2026!` | Usado nos cenários cross-tenant |
-| Regulatório | `regulador@susep.test` | `Demo@2026!` | **Exige MFA** — o código TOTP é impresso no log do seed |
-
-### 12.8 Roteiro de verificação em 5 minutos
-
-1. Entre como `ana.souza`, abra **Clientes** e cadastre um cliente — observe a validação do VO.
-2. Abra o **Live Processing Console** em outra aba e deixe rodando.
-3. Crie uma cotação, converta em proposta e **emita a apólice**.
-4. Volte ao console e percorra os **24 passos** da emissão; clique em um deles.
-5. Abra o **Query Inspector** e veja o `EXPLAIN` real da consulta que carregou o agregado.
-6. Copie o ID de uma apólice. Entre como `carla.dias` (outro tenant) e tente acessá-la — `404`,
-   com `SecurityEvent` registrado.
-
-### 12.9 Observabilidade (opcional)
-
-```bash
-docker compose --profile observability up -d
-```
-
-| Serviço | Endereço |
-|---|---|
-| Grafana | http://localhost:3000 (`admin` / definido no `.env`) |
-| Prometheus | http://localhost:9090 |
-| Tempo (traces) | via Grafana |
-| Loki (logs) | via Grafana |
-
-### 12.10 Laboratório vulnerável ⚠️
-
-```bash
-docker compose --profile security-lab up --build
-```
-
-> **O laboratório nunca sobe no comando padrão.** Roda em rede `internal: true` (sem rota
-> externa), com banco e dados sintéticos próprios, limites de CPU e memória, reset automático e
-> aviso visual permanente. Há verificação no CI garantindo isso. Nunca exponha essas portas fora
-> da sua máquina.
-
-Com o profile ativo, o **Security Lab** fica disponível em http://localhost:5173/labs/security,
-e o Attack Simulator executa os 18 cenários contra as duas versões.
-
-### 12.11 Tudo de uma vez
-
-```bash
-docker compose up --build
-```
-
-Sobe banco, cache, API, workers e frontend em containers. Mais próximo de produção; o modo
-`dotnet run` + `npm run dev` é preferível durante o desenvolvimento por causa do *hot reload*.
-
-### 12.12 Problemas comuns
-
-| Sintoma | Causa provável | Solução |
-|---|---|---|
-| `docker compose up` falha com variável não definida | `.env` não criado | Refaça o passo [12.2](#122-clonar-e-configurar-segredos) |
-| Porta 5432 já em uso | PostgreSQL local instalado | Pare o serviço local ou mude a porta no `docker-compose.yml` |
-| API responde 503 em `/health/ready` | Migrations não aplicadas | Rode o passo [12.4](#124-aplicar-migrations-e-carregar-a-massa-sintética) |
-| Frontend com erro de CORS | Backend em porta diferente | Ajuste `VITE_API_BASE_URL` em `apps/frontend/.env.development` |
-| Consulta retorna vazio sem erro | RLS ativa e sem contexto de tenant | Comportamento **correto** — sem `SET LOCAL app.tenant_id`, a política nega. Visível no Live Processing Console |
-| Testes de integração falham | Docker não está rodando | Testcontainers exige Docker ativo |
-
----
-
-## 13. Estratégia de testes
+## 9. Testes
 
 ```bash
 dotnet test
 ```
 
 ```bash
-dotnet test tests/unit          # rápidos, sem Docker
+dotnet test tests/unit          # sem dependência de Docker
 ```
 
 ```bash
-dotnet test tests/integration   # exige Docker (Testcontainers)
+dotnet test tests/integration   # requer Docker (Testcontainers)
 ```
 
 ```bash
-dotnet test tests/architecture  # fronteiras e regras de segurança da modelagem
+dotnet test tests/architecture  # fronteiras de módulo e regras de modelagem
 ```
 
 | Tipo | Escopo |
 |---|---|
-| **Unitários** | Value Objects, agregados, invariantes, serviços de domínio, máquinas de estado |
-| **Propriedade** | FsCheck sobre invariantes financeiras e de alocação |
-| **Integração** | **Testcontainers com PostgreSQL 16 real** + Respawn — migrations, constraints, repositórios |
-| **RLS e isolamento** | Cada camada derrubada isoladamente, provando que as demais seguram |
-| **Autorização** | RBAC, ABAC, escopo regulatório, finalidade |
-| **Concorrência** | Emissão simultânea, optimistic lock, `SKIP LOCKED` |
-| **Idempotência e Outbox** | Replay, entrega ao menos uma vez, consumo idempotente |
-| **Rollback** | Falha injetada em cada etapa da transação |
-| **Arquiteturais** | NetArchTest — fronteiras de módulo e regras de segurança |
-| **Performance e carga** | BenchmarkDotNet + k6, resultados versionados |
-| **E2E** | Playwright |
-| **Segurança** | Os 18 cenários, automatizados |
+| Unitários | Value Objects, agregados, invariantes, serviços de domínio, máquinas de estado |
+| Propriedade | FsCheck sobre invariantes financeiras e de alocação |
+| Integração | Testcontainers com PostgreSQL 16 real + Respawn |
+| RLS e isolamento | Cada camada derrubada isoladamente, verificando que as demais bloqueiam |
+| Autorização | RBAC, ABAC, escopo, finalidade |
+| Concorrência | Emissão simultânea, optimistic lock, `SKIP LOCKED` |
+| Idempotência e Outbox | Replay, entrega ao menos uma vez, consumo idempotente |
+| Rollback | Falha injetada em cada etapa da transação |
+| Arquiteturais | NetArchTest |
+| Performance | BenchmarkDotNet + k6 |
+| E2E | Playwright |
+| Segurança | Os 18 cenários automatizados |
 
-**Banco em memória é proibido** nos testes de integração. RLS, constraints de exclusão, tipos
-compostos, índices parciais e `xmin` **não existem** em SQLite — testar contra ele daria confiança
-falsa exatamente nos pontos que este case afirma provar.
+Banco em memória não é usado em testes de integração: RLS, constraints de exclusão, tipos
+compostos, índices parciais e `xmin` não existem em SQLite.
 
-### Um bug real encontrado por teste de propriedade
+### Nota de engenharia — bug encontrado por teste de propriedade
 
 A primeira implementação de `Money.Allocate` somava todo o resíduo do arredondamento à primeira
-parcela. A soma ficava correta, e os testes de exemplo escritos por intuição (`R$ 1.000,00 ÷ 3`)
-passavam. Mas para `R$ 0,05 ÷ 12` o resultado era uma parcela de `R$ 0,05` e onze de `R$ 0,00` —
-soma exata, resultado comercialmente absurdo.
+parcela. A soma ficava correta e os testes de exemplo (`R$ 1.000,00 ÷ 3`) passavam. Para
+`R$ 0,05 ÷ 12`, porém, o resultado era uma parcela de `R$ 0,05` e onze de `R$ 0,00`.
 
 A propriedade *"para qualquer valor e qualquer número de parcelas, a soma é exata e a dispersão é
-≤ 1 centavo"* derrubou isso em menos de um segundo, sobre 500 casos gerados. Corrigido com
-distribuição de um centavo por parcela (método do maior resto).
-
-Fica registrado porque é evidência melhor do que qualquer afirmação sobre qualidade de testes.
+≤ 1 centavo"* reprovou em menos de um segundo sobre 500 casos gerados. Corrigido com distribuição
+de um centavo por parcela (método do maior resto).
 
 ---
 
-## 14. Estado do projeto
+## 10. Ferramentas de engenharia
 
-Entrega **incremental** em 10 fases.
+| Ferramenta | Função |
+|---|---|
+| **Live Processing Console** | Eventos em tempo real via SSE, 14 filtros e 16 categorias, com redação automática de dados sensíveis |
+| **Database Explorer** | Grafo navegável lido do catálogo real: tabelas, relações, cardinalidades, mapeamento ORM, índices, constraints, políticas de RLS, partições |
+| **Query Inspector** | SQL executado, parâmetros mascarados, tempo, linhas, `EXPLAIN (ANALYZE, BUFFERS)`, índice utilizado, tipo de scan, origem no código |
+| **Transaction Inspector** | Duração, nível de isolamento, locks, `COMMIT`/`ROLLBACK`, eventos, Outbox, auditoria |
+| **Data Browser** | Consulta interativa aos dados com filtros tipados e navegação por FK. Sem SQL livre: o filtro é traduzido pelo servidor em consulta parametrizada a partir de whitelist |
+| **Engineering Lab** | Comparativos medidos: ORM vs Dapper, com/sem índice, N+1 vs projeção, lazy vs eager, paginado vs não paginado |
+| **Security Lab** | Os 18 cenários executados contra as duas implementações |
+
+Os números de performance exibidos vêm de `EXPLAIN (ANALYZE, BUFFERS)` e de medição no ambiente
+local, publicados com a especificação da máquina, versão do PostgreSQL e volume de dados.
+
+---
+
+## 11. Estado do projeto
+
+Desenvolvimento incremental em 10 fases.
 
 | Fase | Escopo | Status |
 |---|---|---|
-| **1** | Nome, conceito, requisitos, casos de uso, bounded contexts, modelo de domínio, agregados, VOs, modelo físico, ER, arquitetura, ADRs, plano | ✅ **Concluída** |
-| **2** | Fundação: solução .NET, SharedKernel, 19 VOs com testes, Compose, init do PostgreSQL, CI | ✅ **Concluída** |
-| **3** | Banco: 9 migrations, tipos compostos, constraints, índices, RLS, particionamento, Outbox, rollback, esquema vulnerável | ⚠️ **Escrito, não executado** — ver nota |
-| **4** | Domínio + API do núcleo: Identity, Customers, Products, Quotations, Proposals, Policies | ⏳ |
+| **1** | Requisitos, casos de uso, bounded contexts, modelo de domínio, agregados, Value Objects, modelo físico, ER, arquitetura, ADRs | ✅ Concluída |
+| **2** | Solução .NET, SharedKernel, 19 Value Objects com testes, Docker Compose, init do PostgreSQL, CI | ✅ Concluída |
+| **3** | 9 migrations, tipos compostos, constraints, índices, RLS, particionamento, Outbox, rollback, esquema de comparação | ⚠️ Escrito, não executado |
+| **4** | Domínio e API do núcleo: Identity, Customers, Products, Quotations, Proposals, Policies | ⏳ |
 | **5** | Billing, Commissions, Claims, Documents, Notifications, workers | ⏳ |
 | **6** | Frontend: design system, telas de operação, Data Browser | ⏳ |
-| **7** | Observabilidade e laboratórios técnicos | ⏳ |
-| **8** | Security Lab, API vulnerável, Attack Simulator | ⏳ |
-| **9** | Regulatory e agentes de IA | ⏳ |
-| **10** | DevSecOps, GitHub Pages, Recruiter Mode | ⏳ |
+| **7** | Observabilidade e ferramentas de engenharia | ⏳ |
+| **8** | Security Lab, API de comparação, attack simulator | ⏳ |
+| **9** | Módulo regulatório e agentes de IA | ⏳ |
+| **10** | DevSecOps, GitHub Pages, jornada guiada | ⏳ |
 
-**Verificado:** 95 testes passando (89 unitários + 6 arquiteturais), build Release sem avisos,
-`TreatWarningsAsErrors` ativo.
+**Verificado:** 95 testes passando (89 unitários + 6 arquiteturais), build Release sem avisos.
 
-> ### ⚠️ Nota sobre a Fase 3
+> **Fase 3** — as 9 migrations (2.233 linhas de SQL) estão escritas e revisadas, mas ainda não
+> foram executadas contra um PostgreSQL real. Volume de SQL não executado normalmente contém erros
+> de sintaxe ou de ordem de dependência. A validação (`migrate` → `rollback` → `migrate` em base
+> limpa, mais testes de RLS e constraint via Testcontainers) depende de Docker instalado.
 >
-> As 9 migrations (2.233 linhas de SQL) estão escritas e revisadas, mas **nunca foram
-> executadas** — a máquina de desenvolvimento não tem Docker instalado, e sem um PostgreSQL 16
-> real não há como aplicá-las. SQL desse volume que nunca rodou quase certamente contém erros de
-> sintaxe ou de ordem de dependência.
->
-> Considere a Fase 3 **entregue como projeto, não como código verificado**. A verificação
-> acontece assim que houver Docker: `migrate` → `rollback` → `migrate` em base limpa, mais os
-> testes de RLS e de constraint via Testcontainers.
-
-> **Transparência sobre o estado:** as seções [12.4](#124-aplicar-migrations-e-carregar-a-massa-sintética)
-> a [12.11](#1211-tudo-de-uma-vez) descrevem o fluxo de execução alvo. Os componentes das fases
-> marcadas com ⏳ ainda não existem no repositório — a documentação de execução está publicada
-> antecipadamente porque define o contrato que as fases seguintes implementam, mas **não afirme que
-> já funcionam**. O que roda hoje é: infraestrutura Docker, `dotnet build` e `dotnet test`.
+> As seções [2.5](#25-aplicar-migrations) a [2.13](#213-verificação-rápida) descrevem o fluxo de
+> execução alvo; os componentes das fases marcadas com ⏳ ainda não existem no repositório.
 
 ---
 
-## 15. Decisões arquiteturais (ADRs)
-
-Cada decisão registra contexto, alternativas consideradas, trade-offs e consequências.
+## 12. Decisões arquiteturais (ADRs)
 
 | ADR | Decisão |
 |---|---|
-| [0001](docs/adr/0001-nome-e-identidade-do-produto.md) | Nome e identidade visual próprios |
+| [0001](docs/adr/0001-nome-e-identidade-do-produto.md) | Nome e identidade visual |
 | [0002](docs/adr/0002-monolito-modular.md) | Monólito modular em vez de microserviços |
 | [0003](docs/adr/0003-postgresql-como-banco-objeto-relacional.md) | PostgreSQL como banco objeto-relacional |
 | [0004](docs/adr/0004-defesa-em-profundidade-multitenant.md) | Isolamento multi-tenant em cinco camadas |
 | [0005](docs/adr/0005-estrategia-de-heranca-tph-e-tpt.md) | TPH para `Customer`, TPT para `InsurableAsset` |
 | [0006](docs/adr/0006-outbox-transacional.md) | Outbox transacional no PostgreSQL |
-| [0007](docs/adr/0007-sem-message-broker.md) | Sem RabbitMQ — decisão, não omissão |
+| [0007](docs/adr/0007-sem-message-broker.md) | Sem message broker externo |
 | [0008](docs/adr/0008-cqrs-seletivo.md) | CQRS seletivo, sem event sourcing |
-| [0009](docs/adr/0009-laboratorio-vulneravel-isolado.md) | Laboratório vulnerável isolado por profile |
-| [0010](docs/adr/0010-governanca-de-agentes-de-ia.md) | Agentes de IA com privilégio mínimo e guardrails |
+| [0009](docs/adr/0009-laboratorio-vulneravel-isolado.md) | Ambiente de comparação isolado por profile |
+| [0010](docs/adr/0010-governanca-de-agentes-de-ia.md) | Agentes de IA com privilégio mínimo |
 
-### Documentação completa
+### Documentação técnica
 
 | Documento | Conteúdo |
 |---|---|
-| [Requisitos](docs/architecture/requirements.md) | RF e RNF com critérios de aceite |
-| [Revisão dos requisitos](docs/architecture/requirements-review.md) | Auditoria contra os 12 critérios de avaliação, com as lacunas encontradas |
-| [Casos de uso](docs/architecture/use-cases.md) | UC por perfil, fluxos principais e alternativos |
+| [Requisitos](docs/architecture/requirements.md) | Requisitos funcionais e não funcionais com critérios de aceite |
+| [Casos de uso](docs/architecture/use-cases.md) | Fluxos principais e alternativos por perfil |
 | [Bounded Contexts](docs/architecture/bounded-contexts.md) | 16 contextos e mapa de contexto |
-| [Arquitetura](docs/architecture/overview.md) | Estilo, C4, stack e trade-offs |
+| [Arquitetura](docs/architecture/overview.md) | Estilo, C4, stack, trade-offs |
 | [Modelo de domínio](docs/domain/domain-model.md) | Classes, herança, polimorfismo, specifications |
 | [Agregados](docs/domain/aggregates.md) | Invariantes, limites transacionais, concorrência |
-| [Value Objects](docs/domain/value-objects.md) | 19 VOs e estratégia de persistência |
+| [Value Objects](docs/domain/value-objects.md) | Regras de validação e estratégia de persistência |
 | [Modelo físico](docs/database/physical-model.md) | Tabelas, constraints, índices, RLS, particionamento |
 | [Diagrama ER](docs/database/er-diagram.md) | ER completo e mapa invariante → constraint |
 | [Estrutura do repositório](docs/plan/repository-structure.md) | Layout e regras de dependência |
-| [Plano de implementação](docs/plan/implementation-plan.md) | Fases, riscos e mitigações |
-| [Relatório da Fase 2](docs/plan/phase-02-report.md) | O que foi entregue e verificado |
-
----
-
-## 16. Guia de apresentação
-
-**Recruiter Mode** — jornada guiada de 10 a 15 minutos. O foco é o **banco de dados**, não a
-aparência da interface.
-
-1. Problema de negócio → 2. Os dois perfis → 3. Arquitetura → 4. Modelo orientado a objetos →
-5. Modelo objeto-relacional → 6. Cadastro de cliente → 7. Cotação → 8. Proposta →
-9. **Emissão de apólice** → 10. Persistência → 11. **Live Processing Console** →
-12. **Query Inspector** → 13. **Concorrência** → 14. Ataque contra a versão vulnerável →
-15. **Réplica contra a versão segura** → 16. Logs → 17. Métricas → 18. DevSecOps →
-19. Agentes de IA → 20. Trade-offs
-
-### Como verificar cada afirmação deste README
-
-| Afirmação | Verificação |
-|---|---|
-| "As fronteiras entre módulos são reais" | `dotnet test tests/architecture` |
-| "O domínio não depende de framework" | Teste arquitetural que proíbe EF Core em `*.Domain` |
-| "RLS está ativa" | Query Inspector mostra `SET LOCAL app.tenant_id`; Database Explorer lista as políticas do catálogo |
-| "Não há N+1" | Métrica de queries por operação no Live Processing Console |
-| "As invariantes seguram" | Security Lab derruba um controle por vez e mostra o próximo bloqueando |
-| "Os benchmarks são reais" | `EXPLAIN (ANALYZE, BUFFERS)` no Query Inspector, com a especificação da máquina |
-| "Nenhuma credencial versionada" | `git log -p` e o job de gitleaks no CI |
+| [Plano de implementação](docs/plan/implementation-plan.md) | Fases, riscos, mitigações |
+| [Relatório da Fase 2](docs/plan/phase-02-report.md) | Entregas e verificações |
 
 ---
 
 <div align="center">
-
-**NexusBroker** — case técnico de Engenharia de Software
-
-Dados sintéticos · Aplicação, banco, transações e controles reais
 
 [Documentação](docs/) · [ADRs](docs/adr/) · [Licença MIT](LICENSE)
 

@@ -1,8 +1,8 @@
 using FluentAssertions;
-using NexusBroker.SharedKernel.Errors;
-using NexusBroker.SharedKernel.ValueObjects;
+using PortalDoCorretor.SharedKernel.Errors;
+using PortalDoCorretor.SharedKernel.ValueObjects;
 
-namespace NexusBroker.SharedKernel.Tests;
+namespace PortalDoCorretor.SharedKernel.Tests;
 
 public sealed class DateRangeTests
 {
@@ -108,7 +108,7 @@ public sealed class BusinessNumberTests
     {
         var number = PolicyNumber.Generate(2026, 42);
 
-        number.Value.Should().MatchRegex(@"^NB-2026-00000042-\d$");
+        number.Value.Should().MatchRegex(@"^PC-2026-00000042-\d$");
         PolicyNumber.Parse(number.Value).Should().Be(number);
         number.Year.Should().Be(2026);
     }
@@ -129,7 +129,7 @@ public sealed class BusinessNumberTests
     }
 
     [Theory]
-    [InlineData("NB-2026-0000004-2")]     // sequência curta
+    [InlineData("PC-2026-0000004-2")]     // sequência curta
     [InlineData("XX-2026-00000042-1")]    // prefixo errado
     [InlineData("PR-2026-00000042-1")]    // prefixo de proposta em apólice
     [InlineData("")]
@@ -142,7 +142,7 @@ public sealed class BusinessNumberTests
     [Fact]
     public void Cada_tipo_de_numero_tem_prefixo_proprio()
     {
-        PolicyNumber.Generate(2026, 1).Value.Should().StartWith("NB-");
+        PolicyNumber.Generate(2026, 1).Value.Should().StartWith("PC-");
         ProposalNumber.Generate(2026, 1).Value.Should().StartWith("PR-");
         QuotationNumber.Generate(2026, 1).Value.Should().StartWith("CT-");
     }
