@@ -1,0 +1,132 @@
+# NexusBroker — ambiente local
+#
+#   docker compose up --build                          → ambiente SEGURO (padrão)
+#   docker compose --profile security-lab up --build    → inclui o laboratório vulnerável
+#
+# O laboratório vulnerável NUNCA sobe no comando padrão (ADR-0009).
+
+name: nexusbroker
+
+x-security-baseline: &security-baseline
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  # ---------------------------------------------------------------- dados (seguro)
+  secure-database:
+    image: postgres:16.4-alpine
+    container_name: nexus-secure-db
+    <<: *security-baseline
+    environment:
+      POSTGRES_DB: nexusbroker
+      POSTGRES_USER: nexus_migrator
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      # Locale pt-BR para colação correta em busca textual de nomes
+      POSTGRES_INITDB_ARGS: "--locale=pt_BR.UTF-8 --encoding=UTF8"
+      LANG: pt_BR.utf8
+    secrets:
+      - db_password
+    volumes:
+      - secure-db-data:/var/lib/postgresql/data
+      - ./database/secure/scripts/00-init-roles.sql:/docker-entrypoint-initdb.d/00-init-roles.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"   # exposto apenas em loopback
+    networks:
+      - nexus-data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus_migrator -d nexusbroker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+    command:
+      - postgres
+      # Instrumentação necessária para o Query Inspector exibir planos e estatísticas REAIS
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - log_statement=all
+      - -c
+      - log_duration=on
+      - -c
+      - log_lock_waits=on
+      - -c
+      - deadlock_timeout=1s
+      - -c
+      - log_min_duration_statement=0
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: nexus-redis
+    <<: *security-baseline
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - nexus-data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 320M
+
+  # ------------------------------------------------- laboratório vulnerável (isolado)
+  vulnerable-database:
+    image: postgres:16.4-alpine
+    container_name: nexus-vulnerable-db
+    profiles: ["security-lab"]
+    <<: *security-baseline
+    environment:
+      POSTGRES_DB: nexusbroker_vulnerable
+      POSTGRES_USER: vulnerable_app
+      # Segredo fraco DELIBERADO: é um dos achados que o Security Lab demonstra
+      POSTGRES_PASSWORD: vulnerable_lab_only
+    volumes:
+      - vulnerable-db-data:/var/lib/postgresql/data
+    networks:
+      - nexus-lab          # rede SEM rota externa e SEM acesso à rede de dados segura
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vulnerable_app -d nexusbroker_vulnerable"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M
+    labels:
+      br.com.nexusbroker.warning: "LABORATORIO VULNERAVEL - DADOS SINTETICOS - NAO EXPOR"
+
+volumes:
+  secure-db-data:
+  vulnerable-db-data:
+  redis-data:
+
+secrets:
+  db_password:
+    file: ./infrastructure/secrets/db_password.txt
+
+networks:
+  nexus-data:
+    driver: bridge
+  nexus-app:
+    driver: bridge
+  # internal: true bloqueia QUALQUER rota externa — o laboratório não alcança a internet
+  nexus-lab:
+    driver: bridge
+    internal: true

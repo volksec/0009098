@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-and-test:
+    name: Build e testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restaurar
+        run: dotnet restore
+
+      # TreatWarningsAsErrors está ativo no Directory.Build.props:
+      # um aviso de compilação quebra o build, por decisão.
+      - name: Compilar
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Testes unitários (Value Objects, agregados, invariantes)
+        run: >
+          dotnet test tests/unit
+          --no-build --configuration Release
+          --logger "trx;LogFileName=unit.trx"
+          --collect:"XPlat Code Coverage"
+
+      # As fronteiras entre módulos e as regras de segurança da modelagem são verificadas
+      # aqui. Referência cruzada entre módulos ou TenantId construível a partir de entrada
+      # do usuário falham o build, em vez de virarem observação em code review.
+      - name: Testes arquiteturais
+        run: >
+          dotnet test tests/architecture
+          --no-build --configuration Release
+          --logger "trx;LogFileName=architecture.trx"
+
+      - name: Publicar resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: "**/TestResults/**"
+          retention-days: 7
+
+  security:
+    name: Varredura de segurança
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks precisa do histórico completo
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      # RNF-004: segredo commitado bloqueia o merge.
+      - name: Varredura de segredos (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dependências vulneráveis
+        run: |
+          dotnet restore
+          dotnet list package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
+          if grep -q "tem as seguintes\|has the following vulnerable"  vulnerable.txt; then
+            echo "::error::Dependências vulneráveis encontradas"
+            exit 1
+          fi
+
+      - name: Dependências obsoletas (informativo)
+        continue-on-error: true
+        run: dotnet list package --deprecated
+
+  guardrails:
+    name: Guardrails do laboratório
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ADR-0009: o laboratório vulnerável nunca pode subir no comando padrão.
+      # Este job é a garantia automatizada dessa contenção.
+      - name: Laboratório vulnerável não sobe no compose padrão
+        run: |
+          if grep -nE '^\s{2}vulnerable-' docker-compose.yml | while read -r line; do
+              svc_line=$(echo "$line" | cut -d: -f1)
+              # exige 'profiles: ["security-lab"]' nas 10 linhas seguintes à definição
+              if ! sed -n "${svc_line},$((svc_line+10))p" docker-compose.yml | grep -q 'security-lab'; then
+                echo "::error::Serviço vulnerável sem profile security-lab na linha $svc_line"
+                exit 1
+              fi
+            done; then
+            echo "OK: serviços vulneráveis estão sob profile dedicado"
+          fi
+
+      - name: Rede do laboratório é interna (sem rota externa)
+        run: |
+          if ! grep -A3 'nexus-lab:' docker-compose.yml | grep -q 'internal: true'; then
+            echo "::error::A rede nexus-lab deve ser internal: true"
+            exit 1
+          fi
+          echo "OK: nexus-lab isolada"

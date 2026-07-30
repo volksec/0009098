@@ -174,7 +174,20 @@ funções são **capacidades internas** exercidas por contas técnicas e process
 | RF-116 | Cenário de concorrência: dois processos emitindo apólice para a mesma proposta | M | Vulnerável duplica; segura bloqueia por invariante + unique + optimistic lock + idempotência |
 | RF-117 | **Recruiter Mode** — jornada guiada de 10 a 15 minutos, com foco no banco de dados | S | 20 passos conforme especificação |
 
-### 3.13 Agentes de IA
+### 3.13 Interação com o banco e ciclo de vida do registro
+
+Requisitos incorporados após a [revisão contra os 12 critérios de avaliação](requirements-review.md).
+
+| ID | Requisito | Pri | Critério de aceite |
+|---|---|---|---|
+| RF-130 | **Data Browser** interativo: consulta aos dados reais pela interface, com filtros tipados, ordenação e navegação por FK | M | Somente leitura; sem SQL livre; consulta parametrizada gerada pelo servidor a partir de whitelist; passa pelas 5 camadas de isolamento; aparece no Query Inspector |
+| RF-131 | Exclusão lógica como capacidade transversal (`ISoftDeletable`), com cascata lógica e guarda de integridade | M | Query filter global exclui apagados; índice único parcial libera o valor; entidade referenciada por registro vivo não é apagável; motivo obrigatório e auditado |
+| RF-132 | Restauração de registro excluído, com revalidação de invariantes | M | `409` se outro registro assumiu o valor único no intervalo; restauração em cascata é opcional e explícita |
+| RF-133 | Biblioteca de componentes visuais próprios, reutilizáveis e acessíveis | M | Inventário no Storybook; variantes tipadas, estados completos, WCAG 2.1 AA, teste de interação; `SimulatedDataBadge` obrigatório em valor calculado |
+| RF-134 | **Transaction Inspector**: ciclo de vida das transações (duração, isolamento, locks, commit/rollback, eventos, Outbox, auditoria) | M | Demonstra rollback, conflito de optimistic lock, emissão concorrente e `SKIP LOCKED` com dados reais |
+| RF-135 | Monitoramento de **integridade**: métricas próprias e job diário de verificação | M | `audit_coverage_ratio` = 1.0; divergência de integridade gera alerta e aparece no dashboard de conformidade |
+
+### 3.14 Agentes de IA
 
 | ID | Requisito | Pri | Critério de aceite |
 |---|---|---|---|
