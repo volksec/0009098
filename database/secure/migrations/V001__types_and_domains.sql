@@ -91,6 +91,48 @@ AS $$
     END
 $$;
 
+-- ---------------------------------------------------------------- CIFRAGEM
+-- O documento (CPF/CNPJ) é cifrado em repouso. A chave vem de uma configuração de
+-- sessão definida pela aplicação a partir de um segredo externo (Docker secret /
+-- cofre), NUNCA de uma constante no banco: um dump vazado não deve conter a chave
+-- que o decifra.
+CREATE OR REPLACE FUNCTION app.encryption_key() RETURNS text
+LANGUAGE sql STABLE
+AS $$
+    SELECT NULLIF(current_setting('app.encryption_key', true), '')
+$$;
+
+CREATE OR REPLACE FUNCTION app.encrypt_document(p_plain text) RETURNS bytea
+LANGUAGE plpgsql STABLE
+AS $$
+DECLARE
+    v_key text := app.encryption_key();
+BEGIN
+    IF v_key IS NULL THEN
+        RAISE EXCEPTION 'Chave de cifragem ausente no contexto da sessão.'
+            USING ERRCODE = 'insufficient_privilege',
+                  HINT = 'A aplicação deve executar SET LOCAL app.encryption_key.';
+    END IF;
+    RETURN pgp_sym_encrypt(p_plain, v_key, 'cipher-algo=aes256');
+END $$;
+
+CREATE OR REPLACE FUNCTION app.decrypt_document(p_cipher bytea) RETURNS text
+LANGUAGE plpgsql STABLE
+AS $$
+DECLARE
+    v_key text := app.encryption_key();
+BEGIN
+    IF v_key IS NULL THEN
+        RAISE EXCEPTION 'Chave de cifragem ausente no contexto da sessão.'
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN pgp_sym_decrypt(p_cipher, v_key);
+END $$;
+
+COMMENT ON FUNCTION app.decrypt_document(bytea) IS
+    'Falha FECHADO quando não há chave no contexto: sem SET LOCAL app.encryption_key, '
+    'a função lança em vez de retornar NULL silenciosamente.';
+
 -- Sequences por ano para a numeração de negócio. A unicidade sob concorrência é
 -- garantida pelo PostgreSQL, não por contador em memória da aplicação.
 CREATE SEQUENCE app.policy_number_seq   AS bigint START 1;
