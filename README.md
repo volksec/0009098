@@ -1,7 +1,5 @@
 <div align="center">
 
-# NexusBroker
-
 **Plataforma de gestão para corretores de seguros**
 
 *Case técnico de Engenharia de Software — banco de dados objeto-relacional,
@@ -69,8 +67,6 @@ versão segura (que bloqueia, registra `SecurityEvent` e **nomeia o controle** q
 
 ### A tese profissional
 
-O autor é **Pentester Sênior em transição para Engenharia e Arquitetura de Software Sênior**.
-
 A tese é que conhecimento ofensivo aplicado **na fase de concepção** produz software corporativo
 mais seguro do que revisão tardia. Cada controle da versão segura existe porque o ataque
 correspondente está implementado, executável e demonstrável no Security Lab — não porque um
@@ -88,7 +84,7 @@ submarcas e disponibilidade de namespace técnico.
 
 | # | Candidato | Força | Fraqueza | Veredito |
 |---|-----------|-------|----------|----------|
-| 1 | **NexusBroker** | "Nexus" traduz o papel de *hub* que liga corretor ↔ cliente ↔ produto ↔ regulador; permite submarcas (`Regulatory`, `Copilot`, `Labs`) | Levemente anglófono | ✅ **Escolhido** |
+| 1 | **Plataforma** | traduz o papel de *hub* que liga corretor ↔ cliente ↔ produto ↔ regulador; permite submarcas (`Regulatory`, `Copilot`, `Labs`) | Levemente anglófono | ✅ **Escolhido** |
 | 2 | Corretor 360 | Imediatamente compreensível no mercado brasileiro | "360" é sufixo saturado em produtos financeiros; baixa distintividade | ❌ |
 | 3 | SecureBroker | Reforça o eixo AppSec do case | Faz parecer ferramenta de cibersegurança, não plataforma de gestão de carteira | ❌ |
 | 4 | BrokerCore | Bom nome de plataforma | "Core" genérico; sugere componente interno, não produto de ponta a ponta | ❌ |
