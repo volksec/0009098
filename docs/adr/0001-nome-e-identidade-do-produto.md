@@ -2,13 +2,6 @@
 
 **Status:** Aceito · **Data:** 2026-07-30
 
-## Contexto
-
-O case é inspirado conceitualmente em portais corporativos de corretagem de seguros, mas não pode
-usar nome, logotipo, tipografia, imagens, paleta ou componentes proprietários de nenhuma
-seguradora — em particular, não pode usar "Porto" ou "Porto Seguro". Precisa de identidade própria
-e inequivocamente distinta.
-
 ## Decisão
 
 Nome **PortalDoCorretor**, com identidade autoral completa: logotipo (monograma `NB` em hexágono
