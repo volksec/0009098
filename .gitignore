@@ -12,3 +12,6 @@ coverage/
 # Segredos locais: só os .example são versionados
 infrastructure/secrets/*.txt
 .env
+
+# Diretório de execução do start.sh (pids e logs)
+.run/
