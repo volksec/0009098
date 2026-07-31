@@ -198,7 +198,12 @@ public static class QuotationEndpoints
                    CASE c.kind WHEN 'INDIVIDUAL'
                         THEN c.first_name || ' ' || c.last_name
                         ELSE coalesce(c.trade_name, c.legal_name) END AS "customerName",
-                   (q.expires_at <= now() AND q.status IN ('DRAFT','CALCULATED')) AS "isExpired"
+                   (q.expires_at <= now() AND q.status IN ('DRAFT','CALCULATED')) AS "isExpired",
+                   -- Sem isto a tela não distingue "já convertida" de "expirada" e
+                   -- atribui o motivo errado ao usuário
+                   EXISTS (SELECT 1 FROM proposals p
+                            WHERE p.quotation_id = q.id
+                              AND p.status NOT IN ('REJECTED','EXPIRED')) AS "hasProposal"
               FROM quotations q
               JOIN customers c           ON c.id  = q.customer_id
               JOIN insurable_assets a    ON a.id  = q.asset_id

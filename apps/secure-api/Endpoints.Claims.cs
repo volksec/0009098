@@ -181,6 +181,24 @@ public static class ClaimEndpoints
 
             var occurrence = input.OccurrenceDate!.Value.ToDateTime(TimeOnly.MinValue);
 
+            // Um sinistro não pode ter ocorrido amanhã. A vigência sozinha não pega isso:
+            // uma apólice anual aceita datas muitos meses à frente e ainda assim dentro dela.
+            if (input.OccurrenceDate!.Value > DateOnly.FromDateTime(DateTime.UtcNow))
+            {
+                await transaction.RollbackAsync();
+
+                stream.Publish(new ProcessingEvent(
+                    "AuthorizationDecision", "Claims", "claims:report",
+                    "Data do evento no futuro", "DENIED",
+                    "Claim", null, ctx.TenantId, ctx.CorrelationId));
+
+                return Results.UnprocessableEntity(new ValidationProblem("Dados inválidos.",
+                    new Dictionary<string, string[]>
+                    {
+                        ["OccurrenceDate"] = ["A data do evento não pode ser futura."]
+                    }));
+            }
+
             if (occurrence < (DateTime)policy.start || occurrence >= (DateTime)policy.end)
             {
                 await transaction.RollbackAsync();
