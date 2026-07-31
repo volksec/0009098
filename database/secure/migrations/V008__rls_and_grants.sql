@@ -83,7 +83,16 @@ BEGIN
         'proposal_status_history', 'policies', 'policy_coverages', 'endorsements',
         'renewals', 'installment_plans', 'installments', 'payments', 'commissions',
         'claims', 'claim_events', 'damages', 'claim_status_history',
-        'documents', 'notifications'
+        'documents', 'notifications',
+        -- Execuções de agente carregam tenant_id e a entrada/saída do usuário. Ficaram de
+        -- fora da primeira versão desta lista, e um teste de integração que varre o catálogo
+        -- procurando tabelas com tenant_id sem RLS encontrou a omissão. É o motivo de esse
+        -- teste existir: a lista é escrita à mão e uma tabela nova entra sem ela facilmente.
+        'agent_executions',
+        -- Chaves de idempotência guardam o corpo da resposta original por tenant. Sem RLS,
+        -- um tenant leria a resposta de uma emissão de outro. Também encontrada pelo teste
+        -- de varredura do catálogo.
+        'idempotency_keys'
     ] LOOP
         PERFORM app.apply_tenant_rls(v_table);
     END LOOP;

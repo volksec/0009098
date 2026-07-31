@@ -33,6 +33,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PortalDoCorretor.Domain.Tes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PortalDoCorretor.Persistence", "shared\PortalDoCorretor.Persistence\PortalDoCorretor.Persistence.csproj", "{F30DB725-205A-444E-A8DE-F0B183BC1EBB}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "integration", "integration", "{28A6993C-471E-82FE-7D9E-AD3B1EC22BD9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PortalDoCorretor.Integration.Tests", "tests\integration\PortalDoCorretor.Integration.Tests\PortalDoCorretor.Integration.Tests.csproj", "{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -139,6 +143,18 @@ Global
 		{F30DB725-205A-444E-A8DE-F0B183BC1EBB}.Release|x64.Build.0 = Release|Any CPU
 		{F30DB725-205A-444E-A8DE-F0B183BC1EBB}.Release|x86.ActiveCfg = Release|Any CPU
 		{F30DB725-205A-444E-A8DE-F0B183BC1EBB}.Release|x86.Build.0 = Release|Any CPU
+		{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F}.Debug|x64.Build.0 = Debug|Any CPU
+		{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F}.Debug|x86.Build.0 = Debug|Any CPU
+		{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F}.Release|x64.ActiveCfg = Release|Any CPU
+		{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F}.Release|x64.Build.0 = Release|Any CPU
+		{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F}.Release|x86.ActiveCfg = Release|Any CPU
+		{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -156,5 +172,7 @@ Global
 		{9D556B49-86D1-93A7-9596-FFAAB74EC556} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{0E35ED26-38B1-4E34-B66E-B4A85F7632A4} = {9D556B49-86D1-93A7-9596-FFAAB74EC556}
 		{F30DB725-205A-444E-A8DE-F0B183BC1EBB} = {4F52FD11-658E-A102-6CD3-7D7C16FFA15B}
+		{28A6993C-471E-82FE-7D9E-AD3B1EC22BD9} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{C0B31B13-4993-47B8-AAEB-920B6D9FCF6F} = {28A6993C-471E-82FE-7D9E-AD3B1EC22BD9}
 	EndGlobalSection
 EndGlobal

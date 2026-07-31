@@ -10,7 +10,7 @@ Banco de dados objeto-relacional · Modelo de domínio rico · Arquitetura modul
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791)](https://www.postgresql.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)](https://docs.docker.com/compose/)
-[![Testes](https://img.shields.io/badge/testes-187%20passando-1F9D63)](#9-testes)
+[![Testes](https://img.shields.io/badge/testes-201%20passando-1F9D63)](#9-testes)
 [![Licença](https://img.shields.io/badge/licença-MIT-1F6FEB)](LICENSE)
 
 </div>
@@ -48,7 +48,7 @@ PostgreSQL usado como banco objeto-relacional de verdade.
 | **Assincronismo** | Outbox transacional — evento e estado confirmados na mesma transação |
 | **Auditoria** | Trilha append-only imposta por `REVOKE` no banco, particionada por mês |
 | **Observabilidade** | OpenTelemetry ponta a ponta, correlation ID propagado até o banco, métricas de negócio, performance e integridade |
-| **Qualidade** | 187 testes (unitários, propriedade, arquiteturais), `TreatWarningsAsErrors`, fronteiras de módulo verificadas por NetArchTest |
+| **Qualidade** | 201 testes (unitários, propriedade, arquiteturais e integração com PostgreSQL real via Testcontainers), `TreatWarningsAsErrors`, fronteiras de módulo verificadas por NetArchTest |
 
 ### Perfis de acesso
 
