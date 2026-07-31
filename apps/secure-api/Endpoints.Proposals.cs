@@ -627,6 +627,37 @@ public static class ProposalEndpoints
                 policyId
             }, transaction);
 
+            // --- trilha de auditoria, na MESMA transação ------------------------
+            // Sem isto a emissão pela aplicação não deixava rastro: só as apólices do
+            // seed apareciam auditadas, e POLICY_WITHOUT_AUDIT acusava toda emissão real.
+            // Auditoria fora da transação é auditoria que pode faltar justamente quando
+            // mais importa — por isso vai junto do INSERT que ela descreve.
+            await connection.ExecuteAsync("""
+                INSERT INTO audit_events (id, occurred_at, tenant_id, correlation_id, actor_id,
+                       actor_profile, action, resource_type, resource_id, outcome, duration_ms,
+                       after_state)
+                VALUES (gen_random_uuid(), now(), @tenantId, @correlationId, @actor,
+                        'BROKER', 'POLICY_ISSUED', 'Policy', @policyId, 'SUCCESS', @elapsed,
+                        @afterState::jsonb)
+                """, new
+            {
+                tenantId = ctx.TenantId,
+                correlationId = ctx.CorrelationId,
+                actor = ctx.ActorId,
+                policyId,
+                elapsed = (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                afterState = JsonSerializer.Serialize(new
+                {
+                    number,
+                    status = "ACTIVE",
+                    netPremium = (decimal)proposal.netPremium,
+                    totalPremium = totalPremium.Amount,
+                    installments = installmentCount,
+                    periodStart = startDate.ToString("yyyy-MM-dd"),
+                    periodEnd = endDate.ToString("yyyy-MM-dd")
+                })
+            }, transaction);
+
             await connection.ExecuteAsync("""
                 INSERT INTO proposal_status_history (tenant_id, proposal_id, from_status,
                        to_status, reason, changed_by, correlation_id)
