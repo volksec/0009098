@@ -79,10 +79,12 @@ app.MapGet("/api/brokerages", async (IDbConnectionFactory factory) =>
         """));
 }).WithTags("Corretoras");
 
-// ---------------------------------------------------------------- clientes
-// Área administrativa completa (consulta, cadastro, edição, exclusão lógica,
-// restauração) em Endpoints.Customers.cs
-app.MapCustomerEndpoints();
+// ---------------------------------------------------------------- módulos
+// Cada área vive no próprio arquivo de endpoints; aqui só o registro.
+app.MapCustomerEndpoints();    // consulta, cadastro, edição, exclusão lógica, restauração
+app.MapBillingEndpoints();     // parcelas, pagamento simulado, inadimplência
+app.MapCommissionEndpoints();  // extrato, consolidação mensal, liberação, estorno
+app.MapClaimEndpoints();       // aviso, linha do tempo, decisão simulada
 
 // ---------------------------------------------------------------- corretores
 
@@ -90,7 +92,8 @@ app.MapGet("/api/brokers", async (RequestContext ctx, IDbConnectionFactory facto
 {
     await using var connection = await ctx.OpenScopedAsync(factory);
     return Results.Ok(await connection.QueryAsync("""
-        SELECT id, full_name AS "fullName", susep_registration AS "susepRegistration",
+        SELECT id, user_id AS "userId", full_name AS "fullName",
+               susep_registration AS "susepRegistration",
                status::text AS status
           FROM brokers WHERE deleted_at IS NULL ORDER BY full_name
         """));
