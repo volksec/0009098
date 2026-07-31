@@ -420,7 +420,6 @@ export default function App() {
               <button
                 aria-current={page === item.id}
                 onClick={() => setPage(item.id)}
-                style={{ width: '100%' }}
               >
                 {item.label}
               </button>

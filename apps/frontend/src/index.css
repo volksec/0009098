@@ -69,6 +69,11 @@ code, pre, .mono { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, mon
 }
 .nav button {
   all: unset;
+  /* all:unset zera o box-sizing para content-box, então width:100% somava os 24px
+     de padding e cada botão ficava mais largo que a barra — o transbordo aparecia
+     como uma barra de rolagem horizontal no menu. */
+  box-sizing: border-box;
+  width: 100%;
   cursor: pointer;
   padding: 9px 12px;
   border-radius: 8px;
