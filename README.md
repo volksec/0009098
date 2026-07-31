@@ -84,7 +84,7 @@ interface e no Live Processing Console.
 | **Assincronismo** | Outbox transacional — evento e estado confirmados na mesma transação |
 | **Auditoria** | Trilha append-only imposta por `REVOKE` no banco, particionada por mês |
 | **Tempo real** | Live Processing Console via Server-Sent Events, com redação automática de dados sensíveis |
-| **Qualidade** | 227 testes (unitários, propriedade, arquiteturais e integração com PostgreSQL real via Testcontainers) |
+| **Qualidade** | 236 testes (unitários, propriedade, arquiteturais e integração com PostgreSQL real via Testcontainers) |
 
 ### Perfis de acesso
 
@@ -514,7 +514,7 @@ regra vigente e a mensagem de outbox — ou nada disso.
 │
 ├── database/
 │   ├── secure/
-│   │   ├── migrations/           11 migrations versionadas
+│   │   ├── migrations/           12 migrations versionadas
 │   │   ├── rollback/             Script de reversão por migration
 │   │   ├── scripts/              Init de papéis, extensões, contexto de tenant
 │       └── seeds/                Massa determinística
@@ -1060,7 +1060,7 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
 
 **O que está operacional hoje**
 
-- Banco com 71 tabelas, 224 índices, 62 políticas de RLS e 80 partições
+- Banco com 71 tabelas, 224 índices, 66 políticas de RLS e 80 partições
 - CRUD de clientes ponta a ponta, com exclusão lógica e restauração
 - Faturamento: parcelas, inadimplência e quitação simulada
 - Comissões: extrato por corretor, consolidação mensal, liberação e estorno inverso
@@ -1071,7 +1071,7 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
 - Proposta e emissão: análise de risco versionada e apólice emitida em transação única, com
   as três camadas anti-duplicidade
 - Live Processing Console via SSE, Database Explorer e demonstração de isolamento
-- 227 testes, dos quais 17 de integração contra PostgreSQL real
+- 236 testes, dos quais 26 de integração contra PostgreSQL real
 
 ---
 
