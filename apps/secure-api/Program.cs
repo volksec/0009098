@@ -85,6 +85,8 @@ app.MapCustomerEndpoints();    // consulta, cadastro, edição, exclusão lógic
 app.MapBillingEndpoints();     // parcelas, pagamento simulado, inadimplência
 app.MapCommissionEndpoints();  // extrato, consolidação mensal, liberação, estorno
 app.MapClaimEndpoints();       // aviso, linha do tempo, decisão simulada
+app.MapQuotationEndpoints();   // catálogo, cálculo dos 3 planos, conversão
+app.MapProposalEndpoints();    // underwriting simulado e emissão de apólice
 
 // ---------------------------------------------------------------- corretores
 

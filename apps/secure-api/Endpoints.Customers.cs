@@ -31,8 +31,8 @@ public static class CustomerEndpoints
 
     private static async Task<IResult> ListAsync(
         RequestContext ctx, IDbConnectionFactory factory, ActivityStream stream,
-        string? search, string? kind, string? status, bool includeDeleted = false,
-        int page = 1, int pageSize = 20)
+        string? search, string? kind, string? status, Guid? brokerId = null,
+        bool includeDeleted = false, int page = 1, int pageSize = 20)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -46,6 +46,7 @@ public static class CustomerEndpoints
              WHERE (@includeDeleted OR c.deleted_at IS NULL)
                AND (@kind   IS NULL OR c.kind::text   = @kind)
                AND (@status IS NULL OR c.status::text = @status)
+               AND (@brokerId IS NULL OR c.broker_id = @brokerId)
                AND (@search IS NULL
                     OR c.search_vector @@ plainto_tsquery('portuguese', @search)
                     OR coalesce(c.first_name,'') || ' ' || coalesce(c.last_name,'')
@@ -57,6 +58,7 @@ public static class CustomerEndpoints
             search = string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
             kind = string.IsNullOrWhiteSpace(kind) ? null : kind,
             status = string.IsNullOrWhiteSpace(status) ? null : status,
+            brokerId,
             includeDeleted,
             offset = (page - 1) * pageSize,
             limit = pageSize

@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\shared\PortalDoCorretor.SharedKernel\PortalDoCorretor.SharedKernel.csproj" />
     <ProjectReference Include="..\..\shared\PortalDoCorretor.Persistence\PortalDoCorretor.Persistence.csproj" />
+    <ProjectReference Include="..\..\modules\quotations\PortalDoCorretor.Quotations.Domain\PortalDoCorretor.Quotations.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>
