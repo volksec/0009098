@@ -12,9 +12,28 @@
 
 CREATE DOMAIN cpf_digits    AS char(11) CHECK (VALUE ~ '^[0-9]{11}$');
 CREATE DOMAIN cnpj_digits   AS char(14) CHECK (VALUE ~ '^[0-9]{14}$');
-CREATE DOMAIN uf_code       AS char(2)  CHECK (VALUE ~ '^[A-Z]{2}$');
+-- Conjunto fechado, e não formato: '^[A-Z]{2}$' aceitaria 'ZZ' e prometeria uma
+-- garantia que não entrega. As 27 unidades federativas são definidas em lei.
+CREATE DOMAIN uf_code AS char(2) CHECK (
+    VALUE IN ('AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',
+              'PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO')
+);
 CREATE DOMAIN postal_code   AS char(8)  CHECK (VALUE ~ '^[0-9]{8}$');
-CREATE DOMAIN currency_code AS char(3)  CHECK (VALUE ~ '^[A-Z]{3}$');
+-- Idem: o sistema opera exclusivamente em BRL. O cálculo de prêmio, o rateio de
+-- parcelas e a apuração de comissão somam valores assumindo moeda única — aceitar
+-- 'USD' deixaria montantes de moedas diferentes somáveis entre si sem que nenhuma
+-- linha de código tivesse sido revista.
+CREATE DOMAIN currency_code AS char(3) CHECK (VALUE IN ('BRL'));
+
+COMMENT ON DOMAIN uf_code IS
+    'Unidade federativa. Enumerar os 27 valores é mais honesto que checar formato: '
+    'a alternativa aceita ZZ. Note que este CHECK precisa nascer aqui — depois que '
+    'postal_address for usado por alguma coluna, o PostgreSQL recusa ALTER DOMAIN '
+    'sobre um domínio aninhado em tipo composto já referenciado.';
+
+COMMENT ON DOMAIN currency_code IS
+    'Moeda dos valores monetários. Conjunto fechado pelo código: ampliar exige '
+    'migration E revisão de todo cálculo que hoje assume moeda única.';
 
 COMMENT ON DOMAIN cpf_digits IS
     'CPF apenas dígitos. O dígito verificador é validado no VO DocumentNumber; '
