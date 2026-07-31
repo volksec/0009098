@@ -75,7 +75,7 @@ DECLARE
 
     v_tenant uuid; v_user uuid; v_broker uuid; v_customer uuid; v_asset uuid;
     v_quotation uuid; v_proposal uuid; v_policy uuid; v_plan uuid;
-    v_product uuid; v_pv uuid; v_rule uuid;
+    v_product uuid; v_pv uuid; v_rule uuid; v_claim uuid;
     v_seq bigint := 0;
     -- Contador global de veículos. A placa precisa ser única no banco inteiro
     -- (ux_vehicles_plate), então não pode derivar apenas do índice do laço interno.
@@ -263,7 +263,25 @@ BEGIN
                                         LEAST(v_start + 40, CURRENT_DATE),
                                         'Evento sintético para demonstração',
                                         ROW(round(v_premium * 2, 2),'BRL')::money_amount,
-                                        gen_random_uuid());
+                                        gen_random_uuid())
+                                RETURNING id INTO v_claim;
+
+                                -- Linha do tempo append-only: todo sinistro nasce com o
+                                -- evento de aviso, e a análise entra como segundo passo.
+                                INSERT INTO claim_events (tenant_id, claim_id, sequence, kind,
+                                       description, occurred_at, recorded_by) VALUES
+                                    (v_tenant, v_claim, 1, 'REPORTED',
+                                     'Aviso de sinistro registrado pelo corretor',
+                                     now() - interval '5 days',
+                                     '00000000-0000-0000-0000-000000000001'),
+                                    (v_tenant, v_claim, 2, 'DOCUMENTS_REQUESTED',
+                                     'Documentação solicitada ao segurado',
+                                     now() - interval '3 days',
+                                     '00000000-0000-0000-0000-000000000001'),
+                                    (v_tenant, v_claim, 3, 'UNDER_ANALYSIS',
+                                     'Sinistro em análise técnica',
+                                     now() - interval '1 day',
+                                     '00000000-0000-0000-0000-000000000001');
                             END IF;
                         END IF;
                     END IF;

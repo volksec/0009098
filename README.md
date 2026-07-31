@@ -10,7 +10,7 @@ Banco de dados objeto-relacional · Modelo de domínio rico · Arquitetura modul
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791)](https://www.postgresql.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)](https://docs.docker.com/compose/)
-[![Testes](https://img.shields.io/badge/testes-201%20passando-1F9D63)](#9-testes)
+[![Testes](https://img.shields.io/badge/testes-201%20passando-1F9D63)](#14-testes)
 [![Licença](https://img.shields.io/badge/licença-MIT-1F6FEB)](LICENSE)
 
 </div>
@@ -21,15 +21,16 @@ Banco de dados objeto-relacional · Modelo de domínio rico · Arquitetura modul
 
 | | Seção | | Seção |
 |---|---|---|---|
-| ⚡ | [**Quick Start**](#-quick-start) | 8 | [Arquitetura](#8-arquitetura) |
-| 1 | [Visão geral](#1-visão-geral) | 9 | [Modelo de domínio](#9-modelo-de-domínio) |
-| 2 | [Instalação e execução](#2-instalação-e-execução) | 10 | [Banco objeto-relacional](#10-banco-objeto-relacional) |
-| 3 | [URLs](#3-urls) | 11 | [Segurança de aplicação](#11-segurança-de-aplicação) |
-| 4 | [Área administrativa](#4-área-administrativa) | 12 | [Observabilidade](#12-observabilidade) |
-| 5 | [Variáveis de ambiente](#5-variáveis-de-ambiente) | 13 | [Testes](#13-testes) |
-| 6 | [Fluxo da aplicação](#6-fluxo-da-aplicação) | 14 | [Ferramentas de engenharia](#14-ferramentas-de-engenharia) |
-| 7 | [Estrutura do repositório](#7-estrutura-do-repositório) | 15 | [Decisões arquiteturais](#15-decisões-arquiteturais-adrs) |
-| | | 16 | [Solução de problemas](#16-solução-de-problemas) |
+| ⚡ | [**Quick Start**](#-quick-start) | 9 | [Arquitetura](#9-arquitetura) |
+| 1 | [Visão geral](#1-visão-geral) | 10 | [Modelo de domínio](#10-modelo-de-domínio) |
+| 2 | [Instalação e execução](#2-instalação-e-execução) | 11 | [Banco objeto-relacional](#11-banco-objeto-relacional) |
+| 3 | [URLs](#3-urls) | 12 | [Segurança de aplicação](#12-segurança-de-aplicação) |
+| 4 | [Workers](#4-processamento-assíncrono-workers) | 13 | [Observabilidade](#13-observabilidade) |
+| 5 | [Área administrativa](#5-área-administrativa) | 14 | [Testes](#14-testes) |
+| 6 | [Variáveis de ambiente](#6-variáveis-de-ambiente) | 15 | [Ferramentas de engenharia](#15-ferramentas-de-engenharia) |
+| 7 | [Fluxo da aplicação](#7-fluxo-da-aplicação) | 16 | [Decisões arquiteturais](#16-decisões-arquiteturais-adrs) |
+| 8 | [Estrutura do repositório](#8-estrutura-do-repositório) | 17 | [Solução de problemas](#17-solução-de-problemas) |
+| | | 18 | [Estado do projeto](#18-estado-do-projeto) |
 
 ---
 
@@ -223,6 +224,19 @@ Resposta esperada: `{"status":"ready","tables":71}`
 | `DELETE` | `/api/customers/{id}` | **Excluir logicamente** (motivo obrigatório) |
 | `POST` | `/api/customers/{id}/restore` | **Restaurar** cliente excluído |
 | `GET` | `/api/policies` | Apólices |
+| `GET` | `/api/billing/summary` | Resumo de parcelas: pendentes, vencidas, quitadas |
+| `GET` | `/api/billing/installments` | Parcelas — paginação e filtro por status |
+| `GET` | `/api/billing/policies/{id}/installments` | Plano de parcelas de uma apólice |
+| `POST` | `/api/billing/installments/{id}/pay` | **Quitar** parcela (pagamento simulado) |
+| `GET` | `/api/commissions` | Extrato do corretor corrente |
+| `GET` | `/api/commissions/monthly` | Consolidação por competência |
+| `POST` | `/api/commissions/{id}/release` | **Liberar** comissão prevista |
+| `POST` | `/api/commissions/{id}/reverse` | **Estornar** — cria lançamento inverso |
+| `GET` | `/api/claims` | Sinistros — paginação e filtro |
+| `GET` | `/api/claims/{id}` | Sinistro com linha do tempo |
+| `POST` | `/api/claims` | **Avisar** sinistro |
+| `POST` | `/api/claims/{id}/events` | **Acrescentar** evento à linha do tempo |
+| `POST` | `/api/claims/{id}/decide` | **Decidir** (simulado) |
 | `GET` | `/api/dashboard` | Indicadores consolidados |
 | `GET` | `/api/engineering/schema` | Estatísticas do catálogo |
 | `GET` | `/api/engineering/rls` | Políticas de Row-Level Security |
@@ -241,7 +255,48 @@ Resposta esperada: `{"status":"ready","tables":71}`
 
 ---
 
-## 4. Área administrativa
+## 4. Processamento assíncrono (workers)
+
+Cinco *background services* rodam em `apps/workers`, cada um no próprio laço — a falha de um
+não interrompe os demais. Conectam como `app_worker`, papel distinto do `app_user` porque o
+dispatcher precisa atravessar tenants para processar a fila inteira, e essa permissão não deve
+existir no papel que serve requisições de usuário.
+
+| Worker | Intervalo | O que faz |
+|---|---|---|
+| **Outbox Dispatcher** | 500 ms | Publica mensagens com `FOR UPDATE SKIP LOCKED`; *backoff* exponencial até 10 tentativas |
+| **Renewal Scanner** | 6 h | Abre renovações para apólices vencendo em 45 dias |
+| **Billing Scheduler** | 1 h | Marca parcelas vencidas |
+| **Quotation Expirer** | 1 h | Expira cotações fora do prazo |
+| **Integrity Checker** | 12 h | Executa `app.run_integrity_checks()` e grava o resultado |
+
+```bash
+tail -f .run/workers.log
+```
+
+Saída típica na inicialização:
+
+```
+Outbox Dispatcher iniciado (lote 100)
+Renewal Scanner iniciado (intervalo 06:00:00)
+Billing Scheduler iniciado (intervalo 01:00:00)
+Quotation Expirer iniciado (intervalo 01:00:00)
+Integrity Checker iniciado (intervalo 12:00:00)
+Integrity Checker: 10 verificação(ões), nenhuma divergência
+```
+
+**Por que `SKIP LOCKED`** — vários dispatchers podem rodar em paralelo e cada mensagem vai para
+exatamente um deles. Sem isso, o segundo worker ficaria bloqueado esperando o primeiro em vez de
+pegar o próximo lote. A entrega é **ao menos uma vez**; exatamente-uma-vez é inalcançável sem
+coordenação distribuída, então o consumo é idempotente por `processed_messages`.
+
+**Integridade medida, não presumida** — se o modelo estiver correto, as 10 verificações retornam
+zero sempre. Qualquer valor diferente indica invariante contornada, por bug, script manual ou
+migration errada, e é registrado com nível de erro.
+
+---
+
+## 5. Área administrativa
 
 A tela **Administração** opera diretamente sobre o banco.
 
@@ -273,7 +328,7 @@ requisição, nunca do corpo. Um DTO que o aceitasse seria a porta de entrada pa
 
 ---
 
-## 5. Variáveis de ambiente
+## 6. Variáveis de ambiente
 
 ### `.env` (raiz)
 
@@ -308,7 +363,7 @@ requisição, nunca do corpo. Um DTO que o aceitasse seria a porta de entrada pa
 
 ---
 
-## 6. Fluxo da aplicação
+## 7. Fluxo da aplicação
 
 ### Cadastro de cliente, ponta a ponta
 
@@ -368,7 +423,7 @@ COMMIT ⇒ some da listagem padrão (query filter), volta com includeDeleted=tru
 
 ---
 
-## 7. Estrutura do repositório
+## 8. Estrutura do repositório
 
 ```
 0009098/
@@ -439,7 +494,7 @@ code review.
 
 ---
 
-## 8. Arquitetura
+## 9. Arquitetura
 
 **Monólito modular** com Clean Architecture por módulo, portas e adaptadores na fronteira, DDD
 tático no núcleo, *vertical slices* na camada de aplicação e CQRS seletivo.
@@ -535,7 +590,7 @@ toda a lógica de negócio sem banco, sem HTTP e sem mock de framework.
 
 ---
 
-## 9. Modelo de domínio
+## 10. Modelo de domínio
 
 Rich Domain Model: as regras vivem na entidade, no agregado ou em serviços de domínio — não no
 controller nem no repositório.
@@ -621,7 +676,7 @@ Não existe caminho de código que produza uma apólice com prêmio negativo ou 
 
 ---
 
-## 10. Banco objeto-relacional
+## 11. Banco objeto-relacional
 
 ### Recursos do PostgreSQL utilizados
 
@@ -743,7 +798,7 @@ original em caso de replay. Resultado: exatamente uma apólice.
 
 ---
 
-## 11. Segurança de aplicação
+## 12. Segurança de aplicação
 
 ### Isolamento multi-tenant em cinco camadas
 
@@ -828,7 +883,7 @@ e limites de recurso. ([ADR-0009](docs/adr/0009-laboratorio-vulneravel-isolado.m
 
 ---
 
-## 12. Observabilidade
+## 13. Observabilidade
 
 OpenTelemetry ponta a ponta (traces, métricas, logs) via OTel Collector para Prometheus, Loki e
 Tempo, visualizados no Grafana. Correlation ID propagado do frontend até o banco.
@@ -846,7 +901,7 @@ auditoria correspondente. Se o modelo estiver correto, todas retornam zero.
 
 ---
 
-## 13. Testes
+## 14. Testes
 
 ```bash
 dotnet test
@@ -894,7 +949,7 @@ de um centavo por parcela (método do maior resto).
 
 ---
 
-## 14. Ferramentas de engenharia
+## 15. Ferramentas de engenharia
 
 | Ferramenta | Função |
 |---|---|
@@ -911,7 +966,7 @@ local, publicados com a especificação da máquina, versão do PostgreSQL e vol
 
 ---
 
-## 15. Decisões arquiteturais (ADRs)
+## 16. Decisões arquiteturais (ADRs)
 
 | ADR | Decisão |
 |---|---|
@@ -945,7 +1000,7 @@ local, publicados com a especificação da máquina, versão do PostgreSQL e vol
 
 ---
 
-## 16. Solução de problemas
+## 17. Solução de problemas
 
 | Sintoma | Causa | Solução |
 |---|---|---|
@@ -972,7 +1027,7 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
 
 ---
 
-## 17. Estado do projeto
+## 18. Estado do projeto
 
 | Fase | Escopo | Status |
 |---|---|---|
@@ -980,20 +1035,33 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
 | 2 | Solução .NET, SharedKernel, 19 VOs, CI | ✅ Concluída |
 | 3 | 9 migrations, RLS, particionamento, rollback | ✅ Verificada contra PostgreSQL real |
 | 4 | Domínio, persistência, API, CRUD, SSE, frontend | ✅ Funcional |
-| 5 | Billing, Commissions, Claims, workers | ⏳ Modelados no banco; sem API de escrita |
+| 5 | Billing, Commissions, Claims, workers | ✅ Funcional |
 | 6 | Cotação e proposta pela interface | ⏳ |
 | 7 | Query Inspector, Transaction Inspector, Data Browser | ⏳ |
 | 8 | Security Lab e attack simulator | ⏳ |
 | 9 | Módulo regulatório e agentes de IA | ⏳ |
 | 10 | OpenTelemetry, GitHub Pages, Recruiter Mode | ⏳ |
 
-**O que está operacional hoje:** banco completo com 71 tabelas e 62 políticas de RLS; CRUD de
-clientes ponta a ponta; consulta de apólices e dashboard; Live Processing Console; visualização do
-catálogo; demonstração de isolamento; 201 testes.
+**O que está operacional hoje**
 
-**O que ainda não existe:** autenticação (o tenant viaja por cabeçalho, marcado como provisório no
-código), escrita de cotação/proposta/apólice pela interface, laboratório de segurança e agentes
-de IA.
+- Banco com 71 tabelas, 224 índices, 62 políticas de RLS e 80 partições
+- CRUD de clientes ponta a ponta, com exclusão lógica e restauração
+- Faturamento: parcelas, inadimplência e quitação simulada
+- Comissões: extrato por corretor, consolidação mensal, liberação e estorno inverso
+- Sinistros: aviso com validação de vigência, linha do tempo append-only, decisão simulada
+- Cinco workers, incluindo Outbox com `SKIP LOCKED` e verificação diária de integridade
+- Live Processing Console via SSE, Database Explorer e demonstração de isolamento
+- 201 testes, dos quais 14 de integração contra PostgreSQL real
+
+**O que ainda não existe**
+
+- **Autenticação.** O tenant e o ator viajam por cabeçalho, marcado como provisório no código.
+  É a lacuna mais visível: enquanto não existir, a auditoria registra conta técnica em vez do
+  usuário real.
+- Escrita de cotação, proposta e emissão de apólice pela interface (o banco modela tudo, e a
+  emissão concorrente já está testada)
+- Query Inspector com `EXPLAIN`, Transaction Inspector e Data Browser
+- Security Lab com os 18 cenários, módulo regulatório e agentes de IA
 
 ---
 

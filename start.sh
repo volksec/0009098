@@ -51,7 +51,7 @@ fi
 # ---------------------------------------------------------------- parar
 if [ "$STOP" = "1" ]; then
   step "Encerrando serviços"
-  for name in api web; do
+  for name in api workers web; do
     if [ -f "$LOG_DIR/$name.pid" ]; then
       pid="$(cat "$LOG_DIR/$name.pid")"
       kill "$pid" 2>/dev/null && ok "$name (pid $pid) encerrado" || warn "$name já estava parado"
@@ -192,6 +192,19 @@ curl -sf "http://localhost:$API_PORT/health/ready" >/dev/null 2>&1 \
   || die "backend não respondeu. Veja: $LOG_DIR/api.log"
 ok "backend no ar"
 
+# Workers: Outbox Dispatcher, Renewal Scanner, Billing Scheduler, Quotation Expirer
+# e Integrity Checker. Sem eles a API funciona, mas a Outbox acumula e as parcelas
+# não são marcadas como vencidas.
+nohup dotnet run --project apps/workers --no-build --configuration Release \
+      > "$LOG_DIR/workers.log" 2>&1 &
+echo $! > "$LOG_DIR/workers.pid"
+sleep 3
+if grep -q "iniciado" "$LOG_DIR/workers.log" 2>/dev/null; then
+  ok "workers no ar ($(grep -c 'iniciado' "$LOG_DIR/workers.log") em execução)"
+else
+  warn "workers podem não ter iniciado — veja $LOG_DIR/workers.log"
+fi
+
 nohup npm --prefix apps/frontend run dev -- --host 127.0.0.1 --port "$WEB_PORT" \
       > "$LOG_DIR/web.log" 2>&1 &
 echo $! > "$LOG_DIR/web.pid"
@@ -238,6 +251,7 @@ ${BOLD}════════════════════════�
 
   ${BOLD}Logs${RESET_C}
     Backend ................. $LOG_DIR/api.log
+    Workers ................. $LOG_DIR/workers.log
     Frontend ................ $LOG_DIR/web.log
     Banco ................... docker compose logs -f secure-database
 
