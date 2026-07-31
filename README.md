@@ -1071,7 +1071,7 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
 - Proposta e emissão: análise de risco versionada e apólice emitida em transação única, com
   as três camadas anti-duplicidade
 - Live Processing Console via SSE, Database Explorer e demonstração de isolamento
-- 227 testes, dos quais 14 de integração contra PostgreSQL real
+- 227 testes, dos quais 17 de integração contra PostgreSQL real
 
 ---
 
