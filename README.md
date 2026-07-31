@@ -839,36 +839,7 @@ local, publicados com a especificação da máquina, versão do PostgreSQL e vol
 
 ---
 
-## 11. Estado do projeto
-
-Desenvolvimento incremental em 10 fases.
-
-| Fase | Escopo | Status |
-|---|---|---|
-| **1** | Requisitos, casos de uso, bounded contexts, modelo de domínio, agregados, Value Objects, modelo físico, ER, arquitetura, ADRs | ✅ Concluída |
-| **2** | Solução .NET, SharedKernel, 19 Value Objects com testes, Docker Compose, init do PostgreSQL, CI | ✅ Concluída |
-| **3** | 9 migrations, tipos compostos, constraints, índices, RLS, particionamento, Outbox, rollback, esquema de comparação | ⚠️ Escrito, não executado |
-| **4** | Domínio do núcleo: agregados Customer, Proposal e Policy com invariantes e testes | 🔄 Camada de domínio concluída; aplicação e API pendentes |
-| **5** | Billing, Commissions, Claims, Documents, Notifications, workers | ⏳ |
-| **6** | Frontend: design system, telas de operação, Data Browser | ⏳ |
-| **7** | Observabilidade e ferramentas de engenharia | ⏳ |
-| **8** | Security Lab, API de comparação, attack simulator | ⏳ |
-| **9** | Módulo regulatório e agentes de IA | ⏳ |
-| **10** | DevSecOps, GitHub Pages, jornada guiada | ⏳ |
-
-**Verificado:** 187 testes passando (89 Value Objects + 84 agregados, invariantes e contexto de tenant + 14 arquiteturais), build Release sem avisos.
-
-> **Fase 3** — as 9 migrations (2.233 linhas de SQL) estão escritas e revisadas, mas ainda não
-> foram executadas contra um PostgreSQL real. Volume de SQL não executado normalmente contém erros
-> de sintaxe ou de ordem de dependência. A validação (`migrate` → `rollback` → `migrate` em base
-> limpa, mais testes de RLS e constraint via Testcontainers) depende de Docker instalado.
->
-> As seções [2.5](#25-aplicar-migrations) a [2.13](#213-verificação-rápida) descrevem o fluxo de
-> execução alvo; os componentes das fases marcadas com ⏳ ainda não existem no repositório.
-
----
-
-## 12. Decisões arquiteturais (ADRs)
+## 11. Decisões arquiteturais (ADRs)
 
 | ADR | Decisão |
 |---|---|
