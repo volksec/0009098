@@ -35,6 +35,17 @@ code, pre, .mono { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, mon
   display: flex;
   flex-direction: column;
   gap: 26px;
+
+  /* Sem isto a barra estica junto com a página: como item de grid ela assume a
+     altura da linha, e o seletor de corretora — preso ao rodapé por margin-top:auto
+     — descia mais em telas longas que em telas curtas, mudando de lugar a cada
+     navegação. Fixar em 100vh e grudar no topo deixa o seletor sempre no mesmo
+     ponto, e visível durante a rolagem do conteúdo. */
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .brand { display: flex; align-items: center; gap: 11px; }
@@ -48,7 +59,14 @@ code, pre, .mono { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, mon
 .brand-name { font-weight: 650; font-size: 15px; line-height: 1.15; }
 .brand-sub { font-size: 11px; color: #9fb3d1; }
 
-.nav { display: flex; flex-direction: column; gap: 3px; }
+/* Só o menu rola. Se ele fosse a barra inteira a rolar, em janela baixa o seletor
+   de corretora cairia abaixo da dobra e sumiria — o oposto do que se quer de um
+   controle que troca o contexto de toda a aplicação.
+   min-height:0 é necessário: item flex não encolhe abaixo do conteúdo sem isso. */
+.nav {
+  display: flex; flex-direction: column; gap: 3px;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+}
 .nav button {
   all: unset;
   cursor: pointer;
@@ -61,7 +79,8 @@ code, pre, .mono { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, mon
 .nav button:hover { background: rgba(255, 255, 255, .07); color: #fff; }
 .nav button[aria-current='true'] { background: var(--pdc-blue-600); color: #fff; font-weight: 550; }
 
-.tenant-picker { margin-top: auto; }
+/* Ancorado no rodapé da barra, sempre visível: o menu acima é que rola */
+.tenant-picker { flex: none; padding-top: 4px; }
 .tenant-picker label { display: block; font-size: 11px; color: #9fb3d1; margin-bottom: 6px; }
 .tenant-picker select {
   width: 100%; padding: 8px 9px; border-radius: 8px; font-size: 13px;
