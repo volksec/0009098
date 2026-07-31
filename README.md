@@ -21,12 +21,42 @@ Banco de dados objeto-relacional · Modelo de domínio rico · Arquitetura modul
 
 | | Seção | | Seção |
 |---|---|---|---|
-| 1 | [Visão geral](#1-visão-geral) | 7 | [Segurança de aplicação](#7-segurança-de-aplicação) |
-| 2 | [**Subindo o ambiente**](#2-subindo-o-ambiente) | 8 | [Observabilidade](#8-observabilidade) |
-| 3 | [Estrutura do repositório](#3-estrutura-do-repositório) | 9 | [Testes](#9-testes) |
-| 4 | [Arquitetura](#4-arquitetura) | 10 | [Ferramentas de engenharia](#10-ferramentas-de-engenharia) |
-| 5 | [Modelo de domínio](#5-modelo-de-domínio) | 11 | [Decisões arquiteturais](#11-decisões-arquiteturais-adrs) |
-| 6 | [Banco objeto-relacional](#6-banco-objeto-relacional) | | |
+| ⚡ | [**Quick Start**](#-quick-start) | 8 | [Arquitetura](#8-arquitetura) |
+| 1 | [Visão geral](#1-visão-geral) | 9 | [Modelo de domínio](#9-modelo-de-domínio) |
+| 2 | [Instalação e execução](#2-instalação-e-execução) | 10 | [Banco objeto-relacional](#10-banco-objeto-relacional) |
+| 3 | [URLs](#3-urls) | 11 | [Segurança de aplicação](#11-segurança-de-aplicação) |
+| 4 | [Área administrativa](#4-área-administrativa) | 12 | [Observabilidade](#12-observabilidade) |
+| 5 | [Variáveis de ambiente](#5-variáveis-de-ambiente) | 13 | [Testes](#13-testes) |
+| 6 | [Fluxo da aplicação](#6-fluxo-da-aplicação) | 14 | [Ferramentas de engenharia](#14-ferramentas-de-engenharia) |
+| 7 | [Estrutura do repositório](#7-estrutura-do-repositório) | 15 | [Decisões arquiteturais](#15-decisões-arquiteturais-adrs) |
+| | | 16 | [Solução de problemas](#16-solução-de-problemas) |
+
+---
+
+## ⚡ Quick Start
+
+Um único comando sobe **banco, migrations, dados, backend e frontend**:
+
+```bash
+./start.sh
+```
+
+No PowerShell:
+
+```powershell
+.\start.ps1
+```
+
+Ao final o script imprime todas as URLs. Abra **http://localhost:5173**.
+
+| Comando | O que faz |
+|---|---|
+| `./start.sh` | Sobe o ambiente completo (preserva dados existentes) |
+| `./start.sh --reset` | Recria o banco do zero e recarrega a massa sintética |
+| `./start.sh --no-seed` | Sobe sem carregar dados de demonstração |
+| `./start.sh --stop` | Encerra backend, frontend e contêineres |
+
+O script é idempotente: rodar duas vezes não duplica dados nem quebra o ambiente.
 
 ---
 
@@ -37,59 +67,68 @@ O Portal do Corretor cobre o ciclo de vida comercial da corretagem de seguros �
 sinistro** — implementado como um monólito modular com Clean Architecture, DDD tático e
 PostgreSQL usado como banco objeto-relacional de verdade.
 
+O portal **não é só de consulta**: a área de administração cadastra, edita, exclui logicamente e
+restaura registros, com toda operação persistida no PostgreSQL e refletida imediatamente na
+interface e no Live Processing Console.
+
 ### Capacidades técnicas
 
 | Área | Implementação |
 |---|---|
 | **Persistência** | PostgreSQL 16 com tipos compostos, domains, enums, `daterange`, constraints de exclusão, índices parciais e GIN, particionamento mensal |
 | **Domínio** | Rich Domain Model — agregados com invariantes, 19 Value Objects imutáveis, eventos de domínio, specifications, serviços de domínio |
+| **Escrita** | CRUD completo com validação em três camadas (DTO, domínio, banco), transações e mensagens de erro derivadas das constraints |
 | **Concorrência** | Optimistic locking com `xmin` nativo, chaves de idempotência, `SELECT ... FOR UPDATE SKIP LOCKED` |
 | **Multi-tenancy** | Isolamento em 5 camadas independentes, terminando em Row-Level Security com `FORCE` |
 | **Assincronismo** | Outbox transacional — evento e estado confirmados na mesma transação |
 | **Auditoria** | Trilha append-only imposta por `REVOKE` no banco, particionada por mês |
-| **Observabilidade** | OpenTelemetry ponta a ponta, correlation ID propagado até o banco, métricas de negócio, performance e integridade |
-| **Qualidade** | 201 testes (unitários, propriedade, arquiteturais e integração com PostgreSQL real via Testcontainers), `TreatWarningsAsErrors`, fronteiras de módulo verificadas por NetArchTest |
+| **Tempo real** | Live Processing Console via Server-Sent Events, com redação automática de dados sensíveis |
+| **Qualidade** | 201 testes (unitários, propriedade, arquiteturais e integração com PostgreSQL real via Testcontainers) |
 
 ### Perfis de acesso
 
 - **Corretor** — usuário operacional, opera dentro do tenant da sua corretora.
-- **Regulatório** — perfil de supervisão somente-leitura, multi-tenant por escopo autorizado,
-  com finalidade de acesso obrigatória e dados minimizados.
+- **Regulatório** — perfil de supervisão somente-leitura, multi-tenant por escopo autorizado.
 
 Funções de segurança, auditoria e administração são **capacidades internas** exercidas por contas
-técnicas (`Outbox Dispatcher`, `Renewal Scanner`, `Billing Scheduler`, `Integrity Checker`), não
-por perfis de usuário.
+técnicas (`Outbox Dispatcher`, `Renewal Scanner`, `Billing Scheduler`, `Integrity Checker`).
 
 ---
 
-## 2. Subindo o ambiente
+## 2. Instalação e execução
 
 ### 2.1 Pré-requisitos
 
-| Ferramenta | Versão | Verificar |
-|---|---|---|
-| [.NET SDK](https://dotnet.microsoft.com/download/dotnet/9.0) | 9.0+ | `dotnet --version` |
-| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | 24+ | `docker --version` |
-| Docker Compose | v2 | `docker compose version` |
-| [Node.js](https://nodejs.org/) | 20+ | `node --version` |
-| [Git](https://git-scm.com/) | 2.40+ | `git --version` |
+| Ferramenta | Versão | Verificar | Obter |
+|---|---|---|---|
+| .NET SDK | 9.0+ | `dotnet --version` | [download](https://dotnet.microsoft.com/download/dotnet/9.0) |
+| Docker Desktop | 24+ | `docker --version` | [download](https://www.docker.com/products/docker-desktop/) |
+| Node.js | 20+ | `node --version` | [download](https://nodejs.org/) |
+| Git | 2.40+ | `git --version` | [download](https://git-scm.com/) |
 
-> **Windows** — o Docker Desktop precisa estar com WSL 2 habilitado e **em execução**. Os comandos
-> funcionam em PowerShell, Git Bash ou WSL.
+> **Windows** — o Docker Desktop exige **WSL 2**. Se `wsl --status` disser que não está instalado,
+> abra o PowerShell **como Administrador**, rode `wsl --install` e reinicie. Sem isso o engine do
+> Docker não sobe.
 
-### 2.2 Clonar o repositório
+### 2.2 Instalação automática (recomendado)
 
 ```bash
-git clone https://github.com/volksec/0009098.git
+git clone https://github.com/volksec/0009098.git && cd 0009098
 ```
 
 ```bash
-cd 0009098
+./start.sh
 ```
 
-### 2.3 Configurar variáveis e segredos locais
+O script executa, em ordem: verifica pré-requisitos → gera `.env` com senhas aleatórias →
+restaura pacotes .NET e npm → compila → sobe PostgreSQL e Redis → aguarda o healthcheck →
+aplica as 9 migrations → carrega a massa sintética → inicia backend e frontend → imprime as URLs.
 
-Nenhuma credencial é versionada. Crie os arquivos locais a partir dos exemplos:
+### 2.3 Instalação manual
+
+Para entender cada etapa ou depurar um passo específico.
+
+**Passo 1 — variáveis de ambiente**
 
 ```bash
 cp .env.example .env
@@ -99,204 +138,237 @@ cp .env.example .env
 cp infrastructure/secrets/db_password.txt.example infrastructure/secrets/db_password.txt
 ```
 
-Edite os dois arquivos com valores próprios:
+Edite os dois arquivos com valores próprios. Nenhuma credencial é versionada — o Compose **falha
+explicitamente** se uma variável estiver ausente, em vez de subir com padrão inseguro.
 
-```ini
-# .env
-POSTGRES_APP_USER_PASSWORD=defina_um_valor
-POSTGRES_APP_REGULATOR_PASSWORD=defina_um_valor
-POSTGRES_APP_WORKER_PASSWORD=defina_um_valor
-```
-
-O Compose **falha explicitamente** se alguma variável estiver ausente, em vez de subir com um
-padrão inseguro.
-
-### 2.4 Subir banco e cache
+**Passo 2 — banco e cache**
 
 ```bash
 docker compose up -d secure-database redis
 ```
 
-Confirme que os contêineres estão saudáveis:
-
 ```bash
 docker compose ps
 ```
 
-Esperado: `pdc-secure-db` e `pdc-redis` com status `healthy`. Em caso de falha:
+Espere `pdc-secure-db` e `pdc-redis` com status `healthy`.
+
+**Passo 3 — migrations**
 
 ```bash
-docker compose logs secure-database
+for f in database/secure/migrations/V*.sql; do \
+  docker exec -i pdc-secure-db psql -U pdc_migrator -d portal_do_corretor -v ON_ERROR_STOP=1 -q < "$f"; \
+done
 ```
 
-O PostgreSQL sobe com `pg_stat_statements`, `log_statement=all` e `log_lock_waits=on` — a
-instrumentação que alimenta o Query Inspector com planos e estatísticas reais.
-
-### 2.5 Aplicar migrations
+**Passo 4 — massa de dados**
 
 ```bash
-dotnet run --project tools/PortalDoCorretor.DbMigrator -- migrate
+docker exec -i pdc-secure-db psql -U pdc_migrator -d portal_do_corretor -q < database/secure/seeds/demo-seed.sql
 ```
 
-Aplica as 9 migrations em ordem: tipos e domains → identidade e corretoras → clientes e bens →
-produtos e cotações → propostas e apólices → faturamento, comissões e sinistros → auditoria,
-Outbox e partições → RLS e privilégios → views regulatórias e verificações de integridade.
-
-Para reverter toda a cadeia:
+**Passo 5 — backend**
 
 ```bash
-dotnet run --project tools/PortalDoCorretor.DbMigrator -- rollback
-```
-
-### 2.6 Carregar a massa de dados
-
-```bash
-dotnet run --project tools/PortalDoCorretor.DbMigrator -- seed
-```
-
-Geração **determinística** (seed fixa): a mesma base é reproduzida em qualquer máquina, o que
-torna os benchmarks comparáveis entre execuções.
-
-| Tabela | Volume |
-|---|---|
-| Corretoras (tenants) | 8 |
-| Corretores | 40 |
-| Clientes | 25.000 |
-| Bens seguráveis | 38.000 |
-| Cotações | 60.000 |
-| Propostas | 22.000 |
-| Apólices | 14.000 |
-| Parcelas | 84.000 |
-| Comissões | 14.000 |
-| Sinistros | 1.800 |
-| Eventos de auditoria | 400.000 |
-
-O volume é dimensionado para que a diferença entre "com índice" e "sem índice" seja mensurável.
-Com poucas centenas de linhas, qualquer plano de execução é rápido e a comparação não informa nada.
-
-Para recriar a base do zero:
-
-```bash
-dotnet run --project tools/PortalDoCorretor.DbMigrator -- reset
-```
-
-### 2.7 Subir o backend
-
-```bash
-dotnet run --project apps/secure-api
-```
-
-API disponível em **http://localhost:8080**.
-
-| Endereço | Conteúdo |
-|---|---|
-| http://localhost:8080/swagger | Documentação interativa da API |
-| http://localhost:8080/health/live | Liveness |
-| http://localhost:8080/health/ready | Readiness — verifica banco, cache e migrations aplicadas |
-| http://localhost:8080/api/events/stream | Stream SSE do Live Processing Console |
-
-Em outro terminal, suba os workers:
-
-```bash
-dotnet run --project apps/workers
-```
-
-Os workers processam a Outbox, detectam renovações, avançam parcelas e executam as verificações
-de integridade. Sem eles a API continua funcionando, mas as mensagens da Outbox acumulam — o que,
-aliás, é uma forma direta de observar o padrão em ação no Transaction Inspector.
-
-### 2.8 Subir o frontend
-
-Em outro terminal:
-
-```bash
-cd apps/frontend
+export POSTGRES_APP_USER_PASSWORD="$(grep POSTGRES_APP_USER_PASSWORD .env | cut -d= -f2)"
 ```
 
 ```bash
-npm install
+dotnet run --project apps/secure-api --no-launch-profile --urls http://localhost:8080
 ```
+
+**Passo 6 — frontend** (em outro terminal)
 
 ```bash
-npm run dev
+cd apps/frontend && npm install && npm run dev
 ```
 
-Frontend em **http://localhost:5173**, apontando para `http://localhost:8080` via
-`apps/frontend/.env.development`. Se o backend estiver em outra porta, ajuste `VITE_API_BASE_URL`.
-
-### 2.9 Usuários de acesso
-
-Criados pelo `seed`, existentes apenas no ambiente local:
-
-| Perfil | E-mail | Senha |
-|---|---|---|
-| Corretor (tenant A) | `ana.souza@corretoraalfa.test` | `Demo@2026!` |
-| Corretor (tenant A) | `bruno.lima@corretoraalfa.test` | `Demo@2026!` |
-| Corretor (tenant B) | `carla.dias@corretorabeta.test` | `Demo@2026!` |
-| Regulatório | `regulador@susep.test` | `Demo@2026!` |
-
-O perfil regulatório exige MFA; o código TOTP é impresso no log do `seed`.
-
-### 2.10 Observabilidade (opcional)
+### 2.4 Verificação
 
 ```bash
-docker compose --profile observability up -d
+curl http://localhost:8080/health/ready
 ```
 
-| Serviço | Endereço |
-|---|---|
-| Grafana | http://localhost:3000 |
-| Prometheus | http://localhost:9090 |
-| Tempo (traces) | via Grafana |
-| Loki (logs) | via Grafana |
-
-### 2.11 Laboratório de segurança
-
-```bash
-docker compose --profile security-lab up --build
-```
-
-Sobe uma segunda API e um segundo banco, deliberadamente sem constraints, índices, RLS e
-auditoria, para comparação lado a lado com a implementação segura. Roda em rede Docker
-`internal: true`, sem rota externa, com limites de CPU e memória e reset automático.
-
-Disponível em http://localhost:5173/labs/security quando o profile está ativo.
-
-### 2.12 Tudo em contêiner
-
-```bash
-docker compose up --build
-```
-
-Sobe banco, cache, API, workers e frontend. Mais próximo de produção; durante o desenvolvimento,
-`dotnet run` + `npm run dev` é preferível pelo *hot reload*.
-
-### 2.13 Verificação rápida
-
-1. Entre como `ana.souza` e cadastre um cliente — observe a validação dos Value Objects.
-2. Abra o **Live Processing Console** em outra aba.
-3. Crie uma cotação, converta em proposta e emita a apólice.
-4. Percorra os **24 passos** da emissão no console; clique em qualquer um para ver camada, classe,
-   método, estado anterior e posterior, query, índice e duração.
-5. Abra o **Query Inspector** e veja o `EXPLAIN (ANALYZE, BUFFERS)` real da consulta que carregou
-   o agregado.
-6. Copie o ID da apólice, entre como `carla.dias` (outro tenant) e tente acessá-la — `404`, com
-   evento de segurança registrado.
-
-### 2.14 Problemas comuns
-
-| Sintoma | Causa | Solução |
-|---|---|---|
-| Compose falha com variável não definida | `.env` ausente | Refaça o passo [2.3](#23-configurar-variáveis-e-segredos-locais) |
-| Porta 5432 ocupada | PostgreSQL instalado na máquina | Pare o serviço local ou altere a porta no `docker-compose.yml` |
-| `/health/ready` retorna 503 | Migrations não aplicadas | Execute o passo [2.5](#25-aplicar-migrations) |
-| Erro de CORS no frontend | Backend em porta diferente | Ajuste `VITE_API_BASE_URL` |
-| Consulta retorna vazio sem erro | RLS ativa sem contexto de tenant | Comportamento correto — sem `SET LOCAL app.tenant_id` a política nega. Visível no Live Processing Console |
-| Testes de integração falham | Docker parado | Testcontainers exige Docker em execução |
+Resposta esperada: `{"status":"ready","tables":71}`
 
 ---
 
-## 3. Estrutura do repositório
+## 3. URLs
+
+| Recurso | URL | Descrição |
+|---|---|---|
+| **Portal** | http://localhost:5173 | Interface principal |
+| **Administração** | http://localhost:5173 → *Administração* | CRUD de clientes |
+| **Live Console** | http://localhost:5173 → *Live Console* | Eventos em tempo real |
+| **Banco de dados** | http://localhost:5173 → *Banco de dados* | Catálogo, RLS e invariantes |
+| **Isolamento** | http://localhost:5173 → *Isolamento* | Demonstração de multi-tenancy |
+| **Swagger UI** | http://localhost:8080/swagger | Documentação interativa da API |
+| **OpenAPI JSON** | http://localhost:8080/swagger/v1/swagger.json | Especificação |
+| **Health (liveness)** | http://localhost:8080/health/live | Processo vivo |
+| **Health (readiness)** | http://localhost:8080/health/ready | Banco e migrations |
+| **SSE** | http://localhost:8080/api/events/stream | Stream de eventos |
+| **Eventos recentes** | http://localhost:8080/api/events/recent | Fallback por polling |
+| **PostgreSQL** | `localhost:5432/portal_do_corretor` | Banco (loopback apenas) |
+
+### Endpoints da API
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/api/brokerages` | Corretoras (tenants) |
+| `GET` | `/api/brokers` | Corretores do tenant |
+| `GET` | `/api/customers` | Clientes — paginação, busca, filtros |
+| `GET` | `/api/customers/{id}` | Cliente por identificador |
+| `POST` | `/api/customers` | **Cadastrar** cliente |
+| `PUT` | `/api/customers/{id}` | **Editar** cliente |
+| `DELETE` | `/api/customers/{id}` | **Excluir logicamente** (motivo obrigatório) |
+| `POST` | `/api/customers/{id}/restore` | **Restaurar** cliente excluído |
+| `GET` | `/api/policies` | Apólices |
+| `GET` | `/api/dashboard` | Indicadores consolidados |
+| `GET` | `/api/engineering/schema` | Estatísticas do catálogo |
+| `GET` | `/api/engineering/rls` | Políticas de Row-Level Security |
+| `GET` | `/api/engineering/invariants` | Constraints do modelo |
+
+**Parâmetros de `GET /api/customers`:** `search`, `kind` (`INDIVIDUAL`/`BUSINESS`), `status`,
+`includeDeleted`, `page`, `pageSize` (1–100).
+
+### Cabeçalhos
+
+| Cabeçalho | Uso |
+|---|---|
+| `X-Tenant-Id` | Corretora corrente. **Provisório** — passa a vir do claim do token com a autenticação |
+| `X-Actor-Id` | Ator da operação (`created_by`, `deleted_by`, auditoria) |
+| `X-Correlation-Id` | Correlação; gerado se ausente e devolvido em toda resposta |
+
+---
+
+## 4. Área administrativa
+
+A tela **Administração** opera diretamente sobre o banco.
+
+| Operação | Comportamento |
+|---|---|
+| **Cadastro** | Formulário com máscara de CPF/CNPJ e campos que mudam conforme PF ou PJ |
+| **Consulta** | Paginação, busca full-text (`tsvector`) e filtro por tipo |
+| **Edição** | Documento e tipo **não** são editáveis — alterá-los mudaria a identidade do cliente e invalidaria o histórico de apólices |
+| **Exclusão** | Lógica, com motivo obrigatório e cascata em contatos, endereços e bens na mesma transação |
+| **Restauração** | Devolve o registro e os filhos excluídos **no mesmo lote** |
+| **Feedback** | Toasts de sucesso e erro; erros de campo destacados no formulário |
+
+### Validação em três camadas
+
+1. **DTO** (`CustomerInput`) — obrigatoriedade, tamanho, formato de e-mail. Retorna `422` com
+   erros por campo.
+2. **Domínio** (`DocumentNumber`) — dígito verificador de CPF/CNPJ e coerência com o tipo.
+3. **Banco** — `ck_customers_individual_fields`, `ux_customers_tenant_document` e as demais
+   constraints. Cada violação vira uma mensagem acionável:
+
+| Constraint | Resposta |
+|---|---|
+| `ux_customers_tenant_document` | `409` — "Já existe um cliente com este documento nesta corretora." |
+| `ck_customers_individual_fields` | `422` — "Pessoa física exige nome, sobrenome e data de nascimento…" |
+| Apólice vigente | `409` — "Cliente possui N apólice(s) vigente(s) e não pode ser excluído." |
+
+O DTO **não tem propriedade `TenantId`**, e isso é deliberado: o tenant vem do contexto da
+requisição, nunca do corpo. Um DTO que o aceitasse seria a porta de entrada para mass assignment.
+
+---
+
+## 5. Variáveis de ambiente
+
+### `.env` (raiz)
+
+| Variável | Descrição | Padrão |
+|---|---|---|
+| `POSTGRES_APP_USER_PASSWORD` | Senha do papel `app_user` (a aplicação usa este) | gerada pelo `start.sh` |
+| `POSTGRES_APP_REGULATOR_PASSWORD` | Senha do papel `app_regulator` | gerada |
+| `POSTGRES_APP_WORKER_PASSWORD` | Senha do papel `app_worker` | gerada |
+
+### Backend
+
+| Variável | Descrição | Padrão |
+|---|---|---|
+| `POSTGRES_APP_USER_PASSWORD` | Senha do banco — **não** fica no `appsettings.json` | obrigatória |
+| `PDC_DOCUMENT_PEPPER` | Pepper do HMAC de busca por documento | `pdc-local-dev-pepper` |
+| `ASPNETCORE_URLS` | Endereço de escuta | `http://localhost:8080` |
+
+### Frontend (`apps/frontend/.env.development`)
+
+| Variável | Descrição | Padrão |
+|---|---|---|
+| `VITE_API_BASE_URL` | Base da API | `http://localhost:8080` |
+
+### Arquivos de segredo
+
+| Arquivo | Conteúdo | Versionado |
+|---|---|---|
+| `.env` | Senhas dos papéis do banco | ❌ `.gitignore` |
+| `.env.example` | Marcadores | ✅ |
+| `infrastructure/secrets/db_password.txt` | Senha do superusuário | ❌ `.gitignore` |
+| `infrastructure/secrets/db_password.txt.example` | Marcador | ✅ |
+
+---
+
+## 6. Fluxo da aplicação
+
+### Cadastro de cliente, ponta a ponta
+
+```
+Formulário React
+   │ validação de forma no cliente (máscara, obrigatoriedade)
+   ▼
+POST /api/customers  +  X-Tenant-Id  +  X-Correlation-Id
+   │
+   ▼
+Middleware ─── cabeçalhos de segurança, correlation ID
+   │
+   ▼
+RequestContext ─── set_config('app.tenant_id', …, is_local) ⇒ RLS ativa
+   │
+   ▼
+Validação do DTO ──────────── falha ⇒ 422 com erros por campo
+   │
+   ▼
+DocumentNumber.Parse ──────── falha ⇒ 422 "Documento inválido"
+   │                                    (a mensagem nunca ecoa o valor recebido)
+   ▼
+BEGIN TRANSACTION
+   ├── INSERT customers   (tenant_id vem do CONTEXTO, não do corpo)
+   ├── INSERT contacts    (o agregado exige ao menos um contato)
+   ├── CHECK  ck_customers_individual_fields
+   ├── UNIQUE ux_customers_tenant_document ⇒ 409 se duplicado
+   └── RLS    WITH CHECK ⇒ bloqueia tenant forjado
+   │
+   ▼
+COMMIT ─── falha em qualquer ponto ⇒ ROLLBACK total
+   │
+   ├──▶ ActivityStream.Publish  ⇒  SSE  ⇒  Live Processing Console
+   │
+   ▼
+201 Created ⇒ a lista recarrega e o toast confirma
+```
+
+### Exclusão lógica
+
+```
+DELETE /api/customers/{id}  { "reason": "…" }
+   │
+   ▼
+Guarda de integridade ── SELECT count(*) FROM policies WHERE status='ACTIVE'
+   │                     └── > 0 ⇒ 409 CUSTOMER_HAS_ACTIVE_POLICIES
+   ▼
+BEGIN TRANSACTION
+   ├── UPDATE customers SET deleted_at, deleted_by, deletion_reason, deletion_batch_id
+   └── cascata LÓGICA: contacts, addresses, insurable_assets (mesmo lote)
+   ▼
+COMMIT ⇒ some da listagem padrão (query filter), volta com includeDeleted=true
+```
+
+> `DELETE` físico é **revogado** do papel da aplicação no banco. Nem um bug consegue destruir
+> histórico.
+
+---
+
+## 7. Estrutura do repositório
 
 ```
 0009098/
@@ -367,7 +439,7 @@ code review.
 
 ---
 
-## 4. Arquitetura
+## 8. Arquitetura
 
 **Monólito modular** com Clean Architecture por módulo, portas e adaptadores na fronteira, DDD
 tático no núcleo, *vertical slices* na camada de aplicação e CQRS seletivo.
@@ -463,7 +535,7 @@ toda a lógica de negócio sem banco, sem HTTP e sem mock de framework.
 
 ---
 
-## 5. Modelo de domínio
+## 9. Modelo de domínio
 
 Rich Domain Model: as regras vivem na entidade, no agregado ou em serviços de domínio — não no
 controller nem no repositório.
@@ -549,7 +621,7 @@ Não existe caminho de código que produza uma apólice com prêmio negativo ou 
 
 ---
 
-## 6. Banco objeto-relacional
+## 10. Banco objeto-relacional
 
 ### Recursos do PostgreSQL utilizados
 
@@ -671,7 +743,7 @@ original em caso de replay. Resultado: exatamente uma apólice.
 
 ---
 
-## 7. Segurança de aplicação
+## 11. Segurança de aplicação
 
 ### Isolamento multi-tenant em cinco camadas
 
@@ -756,7 +828,7 @@ e limites de recurso. ([ADR-0009](docs/adr/0009-laboratorio-vulneravel-isolado.m
 
 ---
 
-## 8. Observabilidade
+## 12. Observabilidade
 
 OpenTelemetry ponta a ponta (traces, métricas, logs) via OTel Collector para Prometheus, Loki e
 Tempo, visualizados no Grafana. Correlation ID propagado do frontend até o banco.
@@ -774,7 +846,7 @@ auditoria correspondente. Se o modelo estiver correto, todas retornam zero.
 
 ---
 
-## 9. Testes
+## 13. Testes
 
 ```bash
 dotnet test
@@ -822,7 +894,7 @@ de um centavo por parcela (método do maior resto).
 
 ---
 
-## 10. Ferramentas de engenharia
+## 14. Ferramentas de engenharia
 
 | Ferramenta | Função |
 |---|---|
@@ -839,7 +911,7 @@ local, publicados com a especificação da máquina, versão do PostgreSQL e vol
 
 ---
 
-## 11. Decisões arquiteturais (ADRs)
+## 15. Decisões arquiteturais (ADRs)
 
 | ADR | Decisão |
 |---|---|
@@ -870,6 +942,58 @@ local, publicados com a especificação da máquina, versão do PostgreSQL e vol
 | [Estrutura do repositório](docs/plan/repository-structure.md) | Layout e regras de dependência |
 | [Plano de implementação](docs/plan/implementation-plan.md) | Fases, riscos, mitigações |
 | [Relatório da Fase 2](docs/plan/phase-02-report.md) | Entregas e verificações |
+
+---
+
+## 16. Solução de problemas
+
+| Sintoma | Causa | Solução |
+|---|---|---|
+| `Docker não está em execução` | Docker Desktop parado | Abra o Docker Desktop e espere a baleia ficar estável |
+| `Docker Desktop is unable to start` | WSL 2 ausente | PowerShell **como Administrador**: `wsl --install`, depois reinicie |
+| `docker: command not found` | Docker fora do PATH | O `start.sh` procura nos caminhos usuais; se falhar, adicione `%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin` ao PATH |
+| Compose falha com variável não definida | `.env` ausente | `cp .env.example .env` ou rode `./start.sh`, que gera automaticamente |
+| Porta 5432 ocupada | PostgreSQL instalado na máquina | Pare o serviço local ou mude a porta no `docker-compose.yml` |
+| Porta 8080 ou 5173 ocupada | Execução anterior não encerrada | `./start.sh --stop` |
+| `/health/ready` retorna 503 | Migrations não aplicadas | `./start.sh --reset` |
+| `Senha do banco ausente` | Variável não exportada | `export POSTGRES_APP_USER_PASSWORD=…` ou use o `start.sh` |
+| Erro de CORS no navegador | Backend em outra porta | Ajuste `VITE_API_BASE_URL` em `apps/frontend/.env.development` |
+| **Consulta retorna vazio sem erro** | RLS ativa sem contexto de tenant | **Comportamento correto** — sem `app.tenant_id` a política nega. Falha fechado |
+| Comissão aparece R$ 0,00 | Política `RESTRICTIVE` por `broker_id` | Correto: sem autenticação, o ator não é um corretor real |
+| Testes de integração falham | Docker parado | Testcontainers exige Docker em execução |
+| Build falha com arquivo bloqueado | API rodando | `./start.sh --stop` antes de recompilar |
+| SSE não conecta | Proxy com buffer | A API envia `X-Accel-Buffering: no`; use `/api/events/recent` como fallback |
+
+### Diagnóstico rápido
+
+```bash
+docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run/api.log
+```
+
+---
+
+## 17. Estado do projeto
+
+| Fase | Escopo | Status |
+|---|---|---|
+| 1 | Requisitos, modelagem, agregados, Value Objects, ADRs | ✅ Concluída |
+| 2 | Solução .NET, SharedKernel, 19 VOs, CI | ✅ Concluída |
+| 3 | 9 migrations, RLS, particionamento, rollback | ✅ Verificada contra PostgreSQL real |
+| 4 | Domínio, persistência, API, CRUD, SSE, frontend | ✅ Funcional |
+| 5 | Billing, Commissions, Claims, workers | ⏳ Modelados no banco; sem API de escrita |
+| 6 | Cotação e proposta pela interface | ⏳ |
+| 7 | Query Inspector, Transaction Inspector, Data Browser | ⏳ |
+| 8 | Security Lab e attack simulator | ⏳ |
+| 9 | Módulo regulatório e agentes de IA | ⏳ |
+| 10 | OpenTelemetry, GitHub Pages, Recruiter Mode | ⏳ |
+
+**O que está operacional hoje:** banco completo com 71 tabelas e 62 políticas de RLS; CRUD de
+clientes ponta a ponta; consulta de apólices e dashboard; Live Processing Console; visualização do
+catálogo; demonstração de isolamento; 201 testes.
+
+**O que ainda não existe:** autenticação (o tenant viaja por cabeçalho, marcado como provisório no
+código), escrita de cotação/proposta/apólice pela interface, laboratório de segurança e agentes
+de IA.
 
 ---
 
