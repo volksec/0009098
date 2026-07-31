@@ -1058,7 +1058,6 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
 - Escrita de cotação, proposta e emissão de apólice pela interface (o banco modela tudo, e a
   emissão concorrente já está testada)
 - Query Inspector com `EXPLAIN`, Transaction Inspector e Data Browser
-- Security Lab com os 18 cenários, módulo regulatório e agentes de IA
 
 ---
 
