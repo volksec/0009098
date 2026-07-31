@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-PortalDoCorretor.Workers-e15a1f39-f160-4c36-9fb6-63244829a6a9</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.66" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.18" />
+    <PackageReference Include="Npgsql" Version="9.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\shared\PortalDoCorretor.SharedKernel\PortalDoCorretor.SharedKernel.csproj" />
+  </ItemGroup>
+</Project>
