@@ -64,7 +64,8 @@ public static class BillingEndpoints
                         THEN c.first_name || ' ' || c.last_name
                         ELSE coalesce(c.trade_name, c.legal_name) END AS "customerName",
                    -- Vencida é derivado, não armazenado: evita estado que envelhece errado
-                   (i.status = 'PENDING' AND i.due_date < CURRENT_DATE) AS "isOverdue"
+                   (i.status = 'OVERDUE'
+                    OR (i.status = 'PENDING' AND i.due_date < CURRENT_DATE)) AS "isOverdue"
             {filter}
              ORDER BY i.due_date, i.sequence
              OFFSET @offset LIMIT @limit
@@ -100,7 +101,8 @@ public static class BillingEndpoints
         var installments = await connection.QueryAsync("""
             SELECT i.id, i.sequence, (i.amount).amount AS "amount",
                    i.due_date AS "dueDate", i.status::text AS status, i.paid_at AS "paidAt",
-                   (i.status = 'PENDING' AND i.due_date < CURRENT_DATE) AS "isOverdue"
+                   (i.status = 'OVERDUE'
+                    OR (i.status = 'PENDING' AND i.due_date < CURRENT_DATE)) AS "isOverdue"
               FROM installments i
               JOIN installment_plans pl ON pl.id = i.plan_id
              WHERE pl.policy_id = @policyId
@@ -182,14 +184,23 @@ public static class BillingEndpoints
         await using var connection = await ctx.OpenScopedAsync(factory);
 
         return Results.Ok(await connection.QuerySingleAsync("""
-            SELECT count(*) FILTER (WHERE status = 'PENDING')                       AS "pending",
+            -- A inadimplência tem DUAS representações: o Billing Scheduler materializa
+            -- OVERDUE para que o estado seja filtrável, e a data continua valendo entre
+            -- duas execuções dele. Contar só uma das duas produz resumo errado — foi o
+            -- que aconteceu enquanto o worker estava cego e passou a valer quando voltou
+            -- a enxergar: as linhas viraram OVERDUE e sumiram da conta de vencidas.
+            SELECT count(*) FILTER (WHERE status = 'PENDING'
+                                      AND due_date >= CURRENT_DATE)                 AS "pending",
                    count(*) FILTER (WHERE status = 'PAID')                          AS "paid",
-                   count(*) FILTER (WHERE status = 'PENDING'
-                                      AND due_date < CURRENT_DATE)                  AS "overdue",
-                   coalesce(sum((amount).amount) FILTER (WHERE status = 'PENDING'), 0) AS "pendingAmount",
-                   coalesce(sum((amount).amount) FILTER (WHERE status = 'PAID'), 0)    AS "paidAmount",
+                   count(*) FILTER (WHERE status = 'OVERDUE'
+                                       OR (status = 'PENDING'
+                                           AND due_date < CURRENT_DATE))            AS "overdue",
                    coalesce(sum((amount).amount) FILTER (WHERE status = 'PENDING'
-                                      AND due_date < CURRENT_DATE), 0)              AS "overdueAmount"
+                                      AND due_date >= CURRENT_DATE), 0)             AS "pendingAmount",
+                   coalesce(sum((amount).amount) FILTER (WHERE status = 'PAID'), 0) AS "paidAmount",
+                   coalesce(sum((amount).amount) FILTER (WHERE status = 'OVERDUE'
+                                       OR (status = 'PENDING'
+                                           AND due_date < CURRENT_DATE)), 0)        AS "overdueAmount"
               FROM installments
             """));
     }
