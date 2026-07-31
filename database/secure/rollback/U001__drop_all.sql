@@ -1,5 +1,5 @@
 -- =============================================================================
--- ROLLBACK — reverte V001 a V011, na ordem inversa das dependências
+-- ROLLBACK — reverte V001 a V012, na ordem inversa das dependências
 --
 -- Migration sem Down funcional FALHA O BUILD (RNF-054). Este script é executado
 -- por teste de integração: aplica toda a cadeia, reverte, e verifica que o schema
