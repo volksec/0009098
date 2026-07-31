@@ -23,7 +23,7 @@ DECLARE
     i int;
 BEGIN
     FOR i IN 1..8 LOOP
-        v_id := ('a0000000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
+        v_id := md5('pdc:brokerage:' || i::text)::uuid;
 
         PERFORM set_config('app.tenant_id', v_id::text, false);
 
@@ -37,8 +37,8 @@ END $seed$;
 -- ---------------------------------------------------------------- produto
 DO $seed$
 DECLARE
-    v_auto uuid := 'c0000000-0000-4000-8000-000000000001';
-    v_res  uuid := 'c0000000-0000-4000-8000-000000000002';
+    v_auto uuid := md5('pdc:product:auto')::uuid;
+    v_res  uuid := md5('pdc:product:residential')::uuid;
 BEGIN
     INSERT INTO insurance_products (id, code, name, branch) VALUES
         (v_auto, 'AUTO-STD', 'Auto Proteção Total', 'AUTO'),
@@ -48,10 +48,10 @@ BEGIN
     INSERT INTO product_versions (id, product_id, version, branch, base_rate, risk_sensitivity,
            max_acceptable_risk, min_insured_value, max_insured_value, coverage_cap,
            questionnaire_schema, published_at, valid_period)
-    VALUES ('d0000000-0000-4000-8000-000000000001', v_auto, 1, 'AUTO', 0.045, 0.35,
+    VALUES (md5('pdc:pv:auto:1')::uuid, v_auto, 1, 'AUTO', 0.045, 0.35,
             800, 10000, 500000, ROW(500000,'BRL')::money_amount,
             jsonb_build_object('type','object'), now(), daterange('2026-01-01','2027-01-01')),
-           ('d0000000-0000-4000-8000-000000000002', v_res, 1, 'RESIDENTIAL', 0.012, 0.25,
+           (md5('pdc:pv:residential:1')::uuid, v_res, 1, 'RESIDENTIAL', 0.012, 0.25,
             850, 50000, 2000000, ROW(2000000,'BRL')::money_amount,
             jsonb_build_object('type','object'), now(), daterange('2026-01-01','2027-01-01'))
     ON CONFLICT DO NOTHING;
@@ -89,14 +89,14 @@ DECLARE
     t int; b int; c int; k int;
 BEGIN
     FOR t IN 1..8 LOOP
-        v_tenant := ('a0000000-0000-4000-8000-' || lpad(t::text, 12, '0'))::uuid;
+        v_tenant := md5('pdc:brokerage:' || t::text)::uuid;
         PERFORM set_config('app.tenant_id', v_tenant::text, false);
 
         -- 3 a 6 corretores por corretora
         FOR b IN 1..(3 + (t % 4)) LOOP
             v_seq := v_seq + 1;
-            v_user   := ('b0000000-0000-4000-8000-' || lpad(v_seq::text, 12, '0'))::uuid;
-            v_broker := ('b1000000-0000-4000-8000-' || lpad(v_seq::text, 12, '0'))::uuid;
+            v_user   := md5('pdc:user:' || v_seq::text)::uuid;
+            v_broker := md5('pdc:broker:' || v_seq::text)::uuid;
             v_name := v_first[1 + (v_seq % 20)] || ' ' || v_last[1 + (v_seq % 15)];
 
             INSERT INTO users (id, tenant_id, email, password_hash, profile, display_name, created_by)
@@ -117,8 +117,8 @@ BEGIN
                 v_asset := gen_random_uuid();
 
                 IF v_is_business THEN
-                    v_product := 'c0000000-0000-4000-8000-000000000002';
-                    v_pv := 'd0000000-0000-4000-8000-000000000002';
+                    v_product := md5('pdc:product:residential')::uuid;
+                    v_pv := md5('pdc:pv:residential:1')::uuid;
 
                     INSERT INTO customers (id, tenant_id, broker_id, kind, document_encrypted,
                            document_hash, legal_name, trade_name, cnae_code, company_size, created_by)
@@ -139,8 +139,8 @@ BEGIN
                                 'São Paulo', 'SP', '01310100')::postal_address,
                             80 + (c * 7), 2005 + (c % 15), 'MASONRY', 'COMMERCIAL');
                 ELSE
-                    v_product := 'c0000000-0000-4000-8000-000000000001';
-                    v_pv := 'd0000000-0000-4000-8000-000000000001';
+                    v_product := md5('pdc:product:auto')::uuid;
+                    v_pv := md5('pdc:pv:auto:1')::uuid;
 
                     INSERT INTO customers (id, tenant_id, broker_id, kind, document_encrypted,
                            document_hash, first_name, last_name, birth_date, occupation, created_by)
