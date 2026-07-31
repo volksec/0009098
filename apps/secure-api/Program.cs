@@ -14,6 +14,7 @@ builder.Services.AddSwaggerGen(options => options.SwaggerDoc("v1", new()
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IDbConnectionFactory, NpgsqlConnectionFactory>();
+builder.Services.AddSingleton<ActivityStream>();
 builder.Services.AddScoped<RequestContext>();
 
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
@@ -79,50 +80,21 @@ app.MapGet("/api/brokerages", async (IDbConnectionFactory factory) =>
 }).WithTags("Corretoras");
 
 // ---------------------------------------------------------------- clientes
+// Área administrativa completa (consulta, cadastro, edição, exclusão lógica,
+// restauração) em Endpoints.Customers.cs
+app.MapCustomerEndpoints();
 
-app.MapGet("/api/customers", async (RequestContext ctx, IDbConnectionFactory factory,
-                                    string? search, int limit = 25) =>
+// ---------------------------------------------------------------- corretores
+
+app.MapGet("/api/brokers", async (RequestContext ctx, IDbConnectionFactory factory) =>
 {
     await using var connection = await ctx.OpenScopedAsync(factory);
-
-    // Consulta PARAMETRIZADA — o filtro do usuário nunca é concatenado
     return Results.Ok(await connection.QueryAsync("""
-        SELECT c.id, c.kind::text AS kind, c.status::text AS status,
-               CASE c.kind WHEN 'INDIVIDUAL'
-                    THEN c.first_name || ' ' || c.last_name
-                    ELSE coalesce(c.trade_name, c.legal_name) END AS "displayName",
-               c.created_at AS "createdAt",
-               b.full_name  AS "brokerName",
-               (SELECT count(*) FROM insurable_assets a
-                 WHERE a.customer_id = c.id AND a.deleted_at IS NULL) AS "assetCount",
-               (SELECT count(*) FROM policies p
-                 WHERE p.customer_id = c.id AND p.status = 'ACTIVE')  AS "activePolicies"
-          FROM customers c
-          JOIN brokers b ON b.id = c.broker_id
-         WHERE c.deleted_at IS NULL
-           AND (@search IS NULL OR c.search_vector @@ plainto_tsquery('portuguese', @search))
-         ORDER BY c.created_at DESC
-         LIMIT @limit
-        """, new { search, limit = Math.Clamp(limit, 1, 100) }));
-}).WithTags("Clientes");
-
-app.MapGet("/api/customers/{id:guid}", async (Guid id, RequestContext ctx, IDbConnectionFactory factory) =>
-{
-    await using var connection = await ctx.OpenScopedAsync(factory);
-
-    var customer = await connection.QuerySingleOrDefaultAsync("""
-        SELECT c.id, c.kind::text AS kind, c.status::text AS status,
-               CASE c.kind WHEN 'INDIVIDUAL'
-                    THEN c.first_name || ' ' || c.last_name
-                    ELSE coalesce(c.trade_name, c.legal_name) END AS "displayName",
-               c.created_at AS "createdAt"
-          FROM customers c WHERE c.id = @id AND c.deleted_at IS NULL
-        """, new { id });
-
-    // 404 e não 403: responder 403 confirmaria que o recurso existe em outro tenant,
-    // transformando o controle de acesso em oráculo de enumeração.
-    return customer is null ? Results.NotFound() : Results.Ok(customer);
-}).WithTags("Clientes");
+        SELECT id, full_name AS "fullName", susep_registration AS "susepRegistration",
+               status::text AS status
+          FROM brokers WHERE deleted_at IS NULL ORDER BY full_name
+        """));
+}).WithTags("Corretores");
 
 // ---------------------------------------------------------------- apólices
 
@@ -234,5 +206,82 @@ app.MapGet("/api/engineering/invariants", async (IDbConnectionFactory factory) =
          LIMIT 200
         """));
 }).WithTags("Engenharia");
+
+// ---------------------------------------------------------------- Live Processing Console
+// Stream de eventos em tempo real via Server-Sent Events.
+
+app.MapGet("/api/events/stream", async (HttpContext context, ActivityStream stream,
+                                        CancellationToken cancellationToken) =>
+{
+    context.Response.Headers.ContentType = "text/event-stream";
+    context.Response.Headers.CacheControl = "no-cache, no-store";
+    context.Response.Headers.Connection = "keep-alive";
+    // Impede que um proxy reverso acumule a resposta em buffer e destrua o "tempo real"
+    context.Response.Headers["X-Accel-Buffering"] = "no";
+
+    var reader = stream.Subscribe(out var subscription);
+    using (subscription)
+    {
+        // Envia o histórico recente para que quem acabou de conectar já veja contexto
+        foreach (var recent in stream.Recent())
+            await WriteEventAsync(context, recent, cancellationToken);
+
+        await context.Response.Body.FlushAsync(cancellationToken);
+
+        // Heartbeat: sem tráfego, proxies e navegadores encerram a conexão ociosa
+        using var heartbeat = new PeriodicTimer(TimeSpan.FromSeconds(20));
+        var heartbeatTask = HeartbeatAsync(context, heartbeat, cancellationToken);
+
+        try
+        {
+            await foreach (var processingEvent in reader.ReadAllAsync(cancellationToken))
+            {
+                await WriteEventAsync(context, processingEvent, cancellationToken);
+                await context.Response.Body.FlushAsync(cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Cliente desconectou — encerramento normal, não é erro
+        }
+
+        await heartbeatTask.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+    }
+
+    static async Task WriteEventAsync(HttpContext context, ProcessingEvent processingEvent,
+                                      CancellationToken cancellationToken)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(processingEvent,
+            new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+            });
+
+        await context.Response.WriteAsync($"id: {processingEvent.Id}\n", cancellationToken);
+        await context.Response.WriteAsync($"event: {processingEvent.Category}\n", cancellationToken);
+        await context.Response.WriteAsync($"data: {json}\n\n", cancellationToken);
+    }
+
+    static async Task HeartbeatAsync(HttpContext context, PeriodicTimer timer,
+                                     CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await context.Response.WriteAsync(": keep-alive\n\n", cancellationToken);
+                await context.Response.Body.FlushAsync(cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+}).WithTags("Observabilidade")
+  .WithSummary("Stream SSE do Live Processing Console")
+  .ExcludeFromDescription();
+
+// Snapshot dos eventos recentes — fallback por polling quando SSE não estiver disponível.
+app.MapGet("/api/events/recent", (ActivityStream stream) => Results.Ok(stream.Recent()))
+   .WithTags("Observabilidade");
 
 app.Run();

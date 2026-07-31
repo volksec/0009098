@@ -79,6 +79,23 @@ public sealed class RequestContext(IHttpContextAccessor accessor)
             ? "REGULATOR" : "BROKER";
 
     /// <summary>
+    /// Ator da requisição — usado em <c>created_by</c>, <c>deleted_by</c> e na auditoria.
+    /// </summary>
+    /// <remarks>
+    /// Provisório junto com o tenant: enquanto não há autenticação, o ator chega por
+    /// cabeçalho <c>X-Actor-Id</c>, com uma conta técnica como padrão. Passa a vir do claim
+    /// do token quando o login existir.
+    /// </remarks>
+    public Guid ActorId =>
+        Guid.TryParse(_http.Request.Headers["X-Actor-Id"].FirstOrDefault(), out var actor)
+        && actor != Guid.Empty
+            ? actor
+            : SystemAccount;
+
+    /// <summary>Conta técnica usada quando não há ator humano identificado.</summary>
+    public static readonly Guid SystemAccount = Guid.Parse("00000000-0000-0000-0000-000000000001");
+
+    /// <summary>
     /// Abre a conexão já com o contexto de tenant aplicado — a Row-Level Security passa a
     /// filtrar a partir daqui.
     /// </summary>
@@ -99,7 +116,7 @@ public sealed class RequestContext(IHttpContextAccessor accessor)
             """;
         command.Parameters.AddWithValue("tenant", TenantId?.ToString() ?? string.Empty);
         command.Parameters.AddWithValue("profile", Profile);
-        command.Parameters.AddWithValue("actor", Guid.Empty.ToString());
+        command.Parameters.AddWithValue("actor", ActorId.ToString());
         command.Parameters.AddWithValue("correlation", CorrelationId.ToString());
 
         await command.ExecuteNonQueryAsync(cancellationToken);
