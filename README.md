@@ -1020,7 +1020,6 @@ de um centavo por parcela (método do maior resto).
 | **Transaction Inspector** | Duração, nível de isolamento, locks, `COMMIT`/`ROLLBACK`, eventos, Outbox, auditoria |
 | **Data Browser** | Consulta interativa aos dados com filtros tipados e navegação por FK. Sem SQL livre: o filtro é traduzido pelo servidor em consulta parametrizada a partir de whitelist |
 | **Engineering Lab** | Comparativos medidos: ORM vs Dapper, com/sem índice, N+1 vs projeção, lazy vs eager, paginado vs não paginado |
-| **Security Lab** | Os 18 cenários executados contra as duas implementações |
 
 Os números de performance exibidos vêm de `EXPLAIN (ANALYZE, BUFFERS)` e de medição no ambiente
 local, publicados com a especificação da máquina, versão do PostgreSQL e volume de dados.
