@@ -1065,7 +1065,6 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
 | 4 | Domínio, persistência, API, CRUD, SSE, frontend | ✅ Funcional |
 | 5 | Billing, Commissions, Claims, workers | ✅ Funcional |
 | 6 | Cotação e proposta pela interface | ✅ Funcional |
-| 7 | Query Inspector, Transaction Inspector, Data Browser | ⏳ |
 
 **O que está operacional hoje**
 
@@ -1081,14 +1080,6 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
   as três camadas anti-duplicidade
 - Live Processing Console via SSE, Database Explorer e demonstração de isolamento
 - 227 testes, dos quais 14 de integração contra PostgreSQL real
-
-**O que ainda não existe**
-
-- **Autenticação.** O tenant e o ator viajam por cabeçalho, marcado como provisório no código.
-  É a lacuna mais visível: enquanto não existir, a auditoria registra conta técnica em vez do
-  usuário real.
-- Renovação e endosso pela interface (o modelo já contempla ambos)
-- Query Inspector com `EXPLAIN`, Transaction Inspector e Data Browser
 
 ---
 
