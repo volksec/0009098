@@ -8,6 +8,7 @@ export interface Brokerage {
 }
 
 export interface Broker {
+  userId: string
   id: string
   fullName: string
   susepRegistration: string
@@ -168,18 +169,21 @@ export function onRequest(listener: (value: LastRequest) => void) {
 
 interface RequestOptions {
   tenantId?: string
+  actorId?: string
   method?: string
   body?: unknown
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { tenantId, method = 'GET', body } = options
+  const { tenantId, actorId, method = "GET", body } = options
   const started = performance.now()
 
   const headers: Record<string, string> = { Accept: 'application/json' }
   // Provisório: enquanto não há autenticação, o tenant viaja por cabeçalho para
   // permitir alternar de corretora. Passa a vir do claim do token com o login.
   if (tenantId) headers['X-Tenant-Id'] = tenantId
+  // O ator determina quais comissoes a politica RESTRICTIVE torna visiveis
+  if (actorId) headers['X-Actor-Id'] = actorId
   if (body !== undefined) headers['Content-Type'] = 'application/json'
 
   const response = await fetch(`${BASE_URL}${path}`, {
@@ -312,4 +316,155 @@ export function connectEventStream(
     source.close()
     onStateChange('closed')
   }
+}
+
+// ---------------------------------------------------------------- Fase 5
+
+export interface Installment {
+  id: string
+  sequence: number
+  amount: number
+  dueDate: string
+  status: string
+  paidAt: string | null
+  policyNumber: string
+  policyId: string
+  customerName: string
+  isOverdue: boolean
+}
+
+export interface BillingSummary {
+  pending: number
+  paid: number
+  overdue: number
+  pendingAmount: number
+  paidAmount: number
+  overdueAmount: number
+}
+
+export interface Commission {
+  id: string
+  status: string
+  amount: number
+  baseAmount: number
+  rateApplied: number
+  ruleVersion: number
+  referenceMonth: string
+  createdAt: string
+  releasedAt: string | null
+  reversedFromId: string | null
+  policyNumber: string
+  policyId: string
+  brokerName: string
+  customerName: string
+}
+
+export interface MonthlyCommission {
+  referenceMonth: string
+  count: number
+  total: number
+  forecast: number
+  released: number
+  paid: number
+  reversed: number
+}
+
+export interface Claim {
+  id: string
+  number: string
+  status: string
+  occurrenceDate: string
+  reportedAt: string
+  description: string
+  estimatedAmount: number | null
+  settledAmount: number | null
+  decidedAt: string | null
+  decisionReason: string | null
+  policyNumber: string
+  policyId: string
+  customerName: string
+  eventCount: number
+}
+
+export interface ClaimEvent {
+  sequence: number
+  kind: string
+  description: string
+  occurredAt: string
+}
+
+export interface ClaimDetail {
+  claim: Claim & { coverageStart: string; coverageEnd: string }
+  timeline: ClaimEvent[]
+}
+
+export const billingApi = {
+  summary: (tenantId: string) =>
+    request<BillingSummary>('/api/billing/summary', { tenantId }),
+
+  installments: (tenantId: string, params: { status?: string; page?: number } = {}) => {
+    const query = new URLSearchParams()
+    if (params.status) query.set('status', params.status)
+    query.set('page', String(params.page ?? 1))
+    query.set('pageSize', '15')
+    return request<PagedResult<Installment>>(`/api/billing/installments?${query}`, { tenantId })
+  },
+
+  pay: (tenantId: string, id: string, method: string) =>
+    request<{ id: string; status: string }>(`/api/billing/installments/${id}/pay`, {
+      tenantId, method: 'POST', body: { method },
+    }),
+}
+
+export const commissionApi = {
+  list: (tenantId: string, actorId: string, params: { status?: string; page?: number } = {}) => {
+    const query = new URLSearchParams()
+    if (params.status) query.set('status', params.status)
+    query.set('page', String(params.page ?? 1))
+    query.set('pageSize', '15')
+    return request<PagedResult<Commission>>(`/api/commissions?${query}`, { tenantId, actorId })
+  },
+
+  monthly: (tenantId: string, actorId: string) =>
+    request<MonthlyCommission[]>('/api/commissions/monthly', { tenantId, actorId }),
+
+  release: (tenantId: string, actorId: string, id: string) =>
+    request<{ id: string }>(`/api/commissions/${id}/release`, {
+      tenantId, actorId, method: 'POST',
+    }),
+
+  reverse: (tenantId: string, actorId: string, id: string, reason: string) =>
+    request<{ reversalId: string }>(`/api/commissions/${id}/reverse`, {
+      tenantId, actorId, method: 'POST', body: { reason },
+    }),
+}
+
+export const claimApi = {
+  list: (tenantId: string, params: { status?: string; page?: number } = {}) => {
+    const query = new URLSearchParams()
+    if (params.status) query.set('status', params.status)
+    query.set('page', String(params.page ?? 1))
+    query.set('pageSize', '15')
+    return request<PagedResult<Claim>>(`/api/claims?${query}`, { tenantId })
+  },
+
+  detail: (tenantId: string, id: string) =>
+    request<ClaimDetail>(`/api/claims/${id}`, { tenantId }),
+
+  report: (tenantId: string, input: {
+    policyId: string; occurrenceDate: string; description: string; estimatedAmount?: number | null
+  }) => request<{ id: string; number: string }>('/api/claims', {
+    tenantId, method: 'POST', body: input,
+  }),
+
+  addEvent: (tenantId: string, id: string, kind: string, description: string) =>
+    request<{ sequence: number }>(`/api/claims/${id}/events`, {
+      tenantId, method: 'POST', body: { kind, description },
+    }),
+
+  decide: (tenantId: string, id: string, input: {
+    outcome: string; reason: string; settledAmount?: number | null
+  }) => request<{ status: string }>(`/api/claims/${id}/decide`, {
+    tenantId, method: 'POST', body: input,
+  }),
 }

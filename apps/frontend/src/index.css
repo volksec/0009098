@@ -256,3 +256,27 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   margin: 0; padding: 12px 14px; background: var(--pdc-slate-900); color: #8fb8f0;
   border-radius: 8px; font-size: 11.5px; line-height: 1.55; overflow-x: auto; white-space: pre-wrap;
 }
+
+/* ---------------------------------------------------------------- linha do tempo */
+.timeline { display: flex; flex-direction: column; gap: 0; margin-top: 4px; }
+.timeline-item {
+  display: grid; grid-template-columns: 20px 1fr; gap: 12px;
+  padding: 10px 0 10px 2px; position: relative;
+}
+.timeline-item:not(:last-child)::before {
+  content: ''; position: absolute; left: 6px; top: 22px; bottom: -4px;
+  width: 2px; background: var(--pdc-slate-200);
+}
+.timeline-dot {
+  width: 11px; height: 11px; border-radius: 50%; margin-top: 4px;
+  background: var(--pdc-blue-600); border: 2px solid #fff;
+  box-shadow: 0 0 0 2px var(--pdc-blue-100); z-index: 1;
+}
+.timeline-kind { font-size: 12px; font-weight: 620; color: var(--pdc-navy-900); letter-spacing: .2px; }
+.timeline-desc { font-size: 13px; color: var(--pdc-slate-700); margin-top: 2px; }
+.timeline-time { font-size: 11px; color: var(--pdc-slate-500); margin-top: 3px; }
+
+.nav-group {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .7px;
+  color: #6b84a8; padding: 10px 12px 4px; font-weight: 600;
+}

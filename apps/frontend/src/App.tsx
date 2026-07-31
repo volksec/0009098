@@ -5,14 +5,20 @@ import {
   type Invariant, type LastRequest, type Policy, type RlsPolicy, type SchemaStats,
 } from './api'
 import { CustomerAdmin } from './CustomerAdmin'
+import { BillingPage, ClaimsPage, CommissionsPage } from './Operations'
 import { LiveConsole } from './LiveConsole'
 
-type Page = 'dashboard' | 'admin' | 'policies' | 'console' | 'engineering' | 'isolation'
+type Page =
+  | 'dashboard' | 'admin' | 'policies' | 'billing' | 'commissions' | 'claims'
+  | 'console' | 'engineering' | 'isolation'
 
-const PAGES: { id: Page; label: string; group?: string }[] = [
+const PAGES: { id: Page; label: string; group: string }[] = [
   { id: 'dashboard', label: 'Painel', group: 'Operação' },
-  { id: 'admin', label: 'Administração', group: 'Operação' },
+  { id: 'admin', label: 'Clientes', group: 'Operação' },
   { id: 'policies', label: 'Apólices', group: 'Operação' },
+  { id: 'billing', label: 'Faturamento', group: 'Operação' },
+  { id: 'commissions', label: 'Comissões', group: 'Operação' },
+  { id: 'claims', label: 'Sinistros', group: 'Operação' },
   { id: 'console', label: 'Live Console', group: 'Engenharia' },
   { id: 'engineering', label: 'Banco de dados', group: 'Engenharia' },
   { id: 'isolation', label: 'Isolamento', group: 'Engenharia' },
@@ -361,6 +367,18 @@ export default function App() {
       subtitle: 'Cadastro, edição e exclusão lógica persistidos diretamente no PostgreSQL',
     },
     policies: { title: 'Apólices', subtitle: 'Contratos emitidos e suas vigências' },
+    billing: {
+      title: 'Faturamento',
+      subtitle: 'Parcelas, inadimplência e pagamento simulado',
+    },
+    commissions: {
+      title: 'Comissões',
+      subtitle: 'Extrato por corretor, consolidação mensal, liberação e estorno',
+    },
+    claims: {
+      title: 'Sinistros',
+      subtitle: 'Aviso, linha do tempo append-only e decisão simulada',
+    },
     console: {
       title: 'Live Processing Console',
       subtitle: 'Eventos internos da aplicação em tempo real, via Server-Sent Events',
@@ -381,14 +399,20 @@ export default function App() {
         </div>
 
         <nav className="nav">
-          {PAGES.map((item) => (
-            <button
-              key={item.id}
-              aria-current={page === item.id}
-              onClick={() => setPage(item.id)}
-            >
-              {item.label}
-            </button>
+          {PAGES.map((item, index) => (
+            <div key={item.id}>
+              {/* Cabeçalho aparece só na primeira entrada de cada grupo */}
+              {(index === 0 || PAGES[index - 1].group !== item.group) && (
+                <div className="nav-group">{item.group}</div>
+              )}
+              <button
+                aria-current={page === item.id}
+                onClick={() => setPage(item.id)}
+                style={{ width: '100%' }}
+              >
+                {item.label}
+              </button>
+            </div>
           ))}
         </nav>
 
@@ -419,6 +443,9 @@ export default function App() {
 
         {tenantId && page === 'dashboard' && <DashboardPage tenantId={tenantId} />}
         {tenantId && page === 'admin' && <CustomerAdmin key={tenantId} tenantId={tenantId} />}
+        {tenantId && page === 'billing' && <BillingPage key={tenantId} tenantId={tenantId} />}
+        {tenantId && page === 'commissions' && <CommissionsPage key={tenantId} tenantId={tenantId} />}
+        {tenantId && page === 'claims' && <ClaimsPage key={tenantId} tenantId={tenantId} />}
         {page === 'console' && <LiveConsole />}
         {tenantId && page === 'policies' && <PoliciesPage tenantId={tenantId} />}
         {page === 'engineering' && <EngineeringPage />}
