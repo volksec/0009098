@@ -87,7 +87,10 @@ DROP TABLE IF EXISTS contacts;
 DROP TABLE IF EXISTS customers;
 
 -- ---------------------------------------------------------------- V002
-DROP FUNCTION IF EXISTS app.regulatory_scope_current();
+-- A função app.regulatory_scope_current() é referenciada pelas POLÍTICAS de RLS de
+-- brokers e users. Por isso ela só pode ser removida DEPOIS das tabelas — dropá-la
+-- antes falha com "cannot drop function ... because other objects depend on it".
+-- Ordem de rollback não é simplesmente o inverso da criação: é o inverso das dependências.
 DROP TABLE IF EXISTS regulatory_access_sessions;
 DROP TABLE IF EXISTS susep_regulatory_users;
 DROP TABLE IF EXISTS brokers;
@@ -99,6 +102,7 @@ DROP TABLE IF EXISTS roles;
 DROP TABLE IF EXISTS sessions;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS brokerages;
+DROP FUNCTION IF EXISTS app.regulatory_scope_current();
 
 -- ---------------------------------------------------------------- V001
 DROP SEQUENCE IF EXISTS app.claim_number_seq;

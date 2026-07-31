@@ -18,10 +18,23 @@ services:
   secure-database:
     image: postgres:16.4-alpine
     container_name: pdc-secure-db
-    <<: *security-baseline
+    security_opt:
+      - no-new-privileges:true
+    # Descarta tudo e devolve apenas o mínimo que o entrypoint do PostgreSQL exige.
+    # O entrypoint inicia como root, ajusta a propriedade do diretório de dados e então
+    # troca para o usuário 'postgres' — o que precisa de SETUID/SETGID. Com cap_drop ALL
+    # puro, a troca falha com "operation not permitted" e o contêiner nunca sobe.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN            # ajustar dono do PGDATA na inicialização
+      - DAC_OVERRIDE     # ler o arquivo de segredo montado
+      - FOWNER           # ajustar permissões do PGDATA
+      - SETUID           # trocar de root para postgres
+      - SETGID
     environment:
-      POSTGRES_DB: portal-do-corretor
-      POSTGRES_USER: nexus_migrator
+      POSTGRES_DB: portal_do_corretor
+      POSTGRES_USER: pdc_migrator
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
       # Locale pt-BR para colação correta em busca textual de nomes
       POSTGRES_INITDB_ARGS: "--locale=pt_BR.UTF-8 --encoding=UTF8"
@@ -40,7 +53,7 @@ services:
     networks:
       - pdc-data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nexus_migrator -d portal-do-corretor"]
+      test: ["CMD-SHELL", "pg_isready -U pdc_migrator -d portal_do_corretor"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -95,7 +108,7 @@ services:
     profiles: ["security-lab"]
     <<: *security-baseline
     environment:
-      POSTGRES_DB: portal-do-corretor_vulnerable
+      POSTGRES_DB: portal_do_corretor_vulnerable
       POSTGRES_USER: vulnerable_app
       # Segredo fraco DELIBERADO: é um dos achados que o Security Lab demonstra
       POSTGRES_PASSWORD: vulnerable_lab_only
@@ -104,7 +117,7 @@ services:
     networks:
       - pdc-lab          # rede SEM rota externa e SEM acesso à rede de dados segura
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vulnerable_app -d portal-do-corretor_vulnerable"]
+      test: ["CMD-SHELL", "pg_isready -U vulnerable_app -d portal_do_corretor_vulnerable"]
       interval: 5s
       timeout: 5s
       retries: 10

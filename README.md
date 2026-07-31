@@ -25,8 +25,8 @@ Banco de dados objeto-relacional · Modelo de domínio rico · Arquitetura modul
 | 2 | [**Subindo o ambiente**](#2-subindo-o-ambiente) | 8 | [Observabilidade](#8-observabilidade) |
 | 3 | [Estrutura do repositório](#3-estrutura-do-repositório) | 9 | [Testes](#9-testes) |
 | 4 | [Arquitetura](#4-arquitetura) | 10 | [Ferramentas de engenharia](#10-ferramentas-de-engenharia) |
-| 5 | [Modelo de domínio](#5-modelo-de-domínio) | 11 | [Estado do projeto](#11-estado-do-projeto) |
-| 6 | [Banco objeto-relacional](#6-banco-objeto-relacional) | 12 | [Decisões arquiteturais](#12-decisões-arquiteturais-adrs) |
+| 5 | [Modelo de domínio](#5-modelo-de-domínio) | 11 | [Decisões arquiteturais](#11-decisões-arquiteturais-adrs) |
+| 6 | [Banco objeto-relacional](#6-banco-objeto-relacional) | | |
 
 ---
 

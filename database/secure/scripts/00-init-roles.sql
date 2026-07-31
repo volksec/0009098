@@ -31,23 +31,31 @@ COMMENT ON SCHEMA regulatory IS
 \getenv app_regulator_password POSTGRES_APP_REGULATOR_PASSWORD
 \getenv app_worker_password POSTGRES_APP_WORKER_PASSWORD
 
-DO $$
-BEGIN
-    -- DML dentro do tenant. Sem DDL, sem BYPASSRLS.
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
-        EXECUTE format('CREATE ROLE app_user LOGIN PASSWORD %L', :'app_user_password');
-    END IF;
+-- A criação usa SELECT format(...) + \gexec, e NÃO um bloco DO $$ ... $$.
+--
+-- Motivo: a interpolação :'variavel' do psql acontece no CLIENTE, antes de enviar o
+-- comando. Dentro de um bloco dollar-quoted o conteúdo é uma string literal, e o psql
+-- não substitui variáveis ali — o servidor receberia o ':' cru e falharia com
+-- "syntax error at or near :". Com \gexec, o format() é avaliado como uma consulta
+-- normal e cada linha do resultado é executada como comando.
+--
+-- format() com %L continua fazendo o escape correto do literal, então a senha nunca
+-- é concatenada sem tratamento.
 
-    -- Somente leitura, e apenas no schema regulatory (views mascaradas).
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_regulator') THEN
-        EXECUTE format('CREATE ROLE app_regulator LOGIN PASSWORD %L', :'app_regulator_password');
-    END IF;
+-- DML dentro do tenant. Sem DDL, sem BYPASSRLS.
+SELECT format('CREATE ROLE app_user LOGIN PASSWORD %L', :'app_user_password')
+ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user')
+\gexec
 
-    -- Workers: Outbox, renovação, faturamento, verificação de integridade.
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_worker') THEN
-        EXECUTE format('CREATE ROLE app_worker LOGIN PASSWORD %L', :'app_worker_password');
-    END IF;
-END $$;
+-- Somente leitura, e apenas no schema regulatory (views mascaradas).
+SELECT format('CREATE ROLE app_regulator LOGIN PASSWORD %L', :'app_regulator_password')
+ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_regulator')
+\gexec
+
+-- Workers: Outbox, renovação, faturamento, verificação de integridade.
+SELECT format('CREATE ROLE app_worker LOGIN PASSWORD %L', :'app_worker_password')
+ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_worker')
+\gexec
 
 -- Nenhum privilégio implícito: tudo é concedido explicitamente pelas migrations.
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
