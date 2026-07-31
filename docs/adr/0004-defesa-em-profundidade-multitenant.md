@@ -25,9 +25,9 @@ tenant.
 **Schema por tenant** — descartado. Meio-termo que complica migrations e connection pooling sem
 resolver o problema regulatório.
 
-**Apenas query filter do ORM** — descartado como camada única. É exatamente o que a
-`vulnerable-api` faz, e o Security Lab demonstra o resultado: um SQL cru, um `IgnoreQueryFilters()`
-esquecido ou um endpoint novo sem o filtro derrubam o isolamento inteiro.
+**Apenas query filter do ORM** — descartado como camada única. Um SQL cru, um
+`IgnoreQueryFilters()` esquecido ou um endpoint novo sem o filtro derrubam o isolamento inteiro:
+a garantia fica na disciplina de quem escreve o código, não na infraestrutura.
 
 ## Consequências
 

@@ -359,8 +359,8 @@ ALTER TABLE policies
 
 **Por que replicar a invariante no banco?** O VO garante que a *aplicação* não crie estado
 inválido. A constraint garante que **nada** crie estado inválido — nem migration mal escrita, nem
-script de correção manual, nem a aplicação vulnerável do laboratório. É exatamente essa diferença
-que o Security Lab demonstra: o banco vulnerável não tem essas constraints, e o resultado aparece
+script de correção manual, nem um `psql` aberto. É exatamente essa diferença que os testes de
+integração demonstram: sem essas constraints, o estado inválido entra, e o resultado aparece
 em segundos.
 
 ## Testes

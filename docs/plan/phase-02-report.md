@@ -10,9 +10,8 @@
 | SharedKernel: abstrações de domínio | `shared/PortalDoCorretor.SharedKernel/Domain/` | `Entity`, `AggregateRoot`, `IDomainEvent`, `ITenantScoped`, `ISoftDeletable`, `IAuditable`, `IClock` |
 | 16 Value Objects imutáveis e autovalidados | `shared/.../ValueObjects/` | 89 testes unitários |
 | Testes arquiteturais | `tests/architecture/` | 6 regras verificadas |
-| Docker Compose com profile isolado | `docker-compose.yml` | Laboratório vulnerável fora do comando padrão |
 | Inicialização do PostgreSQL | `database/secure/scripts/00-init-roles.sql` | Papéis de menor privilégio, extensões, contexto de tenant |
-| Pipeline CI | `.github/workflows/ci.yml` | Build, testes, gitleaks, dependências vulneráveis, guardrails do laboratório |
+| Pipeline CI | `infrastructure/ci/ci.yml` | Build, testes, gitleaks e verificação de dependências |
 
 **Resultado da suíte:** 95 testes, 0 falhas, build Release sem avisos.
 

@@ -402,10 +402,10 @@ evento publicado sem estado — porque ambos moram na mesma transação de banco
 
 ## 7. Encapsulamento — o contraste que o case demonstra
 
-**Modelo anêmico (aplicação vulnerável — o antipadrão, implementado de propósito):**
+**Modelo anêmico (o antipadrão, mostrado para contraste):**
 
 ```csharp
-// apps/vulnerable-api — NÃO seguir
+// NÃO seguir
 public class Policy
 {
     public Guid Id { get; set; }
@@ -458,14 +458,14 @@ public sealed class Policy : AggregateRoot<PolicyId>
 
 A diferença não é estética. No modelo anêmico, **cada chamador** precisa lembrar de validar; basta
 um esquecer. No modelo rico, o estado inválido é **inalcançável** — não há caminho de código que
-produza uma apólice com prêmio negativo ou status inventado. O Security Lab executa o mesmo ataque
+produza uma apólice com prêmio negativo ou status inventado. Os testes de domínio executam o mesmo ataque
 contra as duas versões e mostra exatamente onde a segunda para.
 
 ## 8. Catálogo de classes por categoria
 
 | Categoria | Classes |
 |---|---|
-| **Aggregate Roots** | `Brokerage`, `Broker`, `User`, `Customer`, `InsuranceProduct`, `Quotation`, `Proposal`, `Policy`, `InstallmentPlan`, `Commission`, `Claim`, `Document`, `Notification`, `Agent`, `AgentExecution`, `RegulatoryAccessSession` |
+| **Aggregate Roots** | `Brokerage`, `Broker`, `User`, `Customer`, `InsuranceProduct`, `Quotation`, `Proposal`, `Policy`, `InstallmentPlan`, `Commission`, `Claim`, `Document`, `Notification`, `RegulatoryAccessSession` |
 | **Entidades** | `Contact`, `Address`, `Consent`, `InsurableAsset`, `Vehicle`, `Property`, `Coverage`, `Assistance`, `EligibilityRule`, `QuotationItem`, `RiskProfile`, `CalculationSnapshot`, `ProposalDocument`, `Pendency`, `UnderwritingDecision`, `PolicyCoverage`, `Endorsement`, `Renewal`, `Installment`, `Payment`, `CommissionRule`, `CommissionEntry`, `ClaimEvent`, `Damage`, `Session`, `Role`, `Permission`, `AgentSkill`, `SusepRegulatoryUser` |
 | **Value Objects** | `Money`, `Percentage`, `EmailAddress`, `PhoneNumber`, `DocumentNumber`, `PostalAddress`, `DateRange`, `PolicyNumber`, `ProposalNumber`, `QuotationNumber`, `CommissionRate`, `RiskScore`, `CoverageLimit`, `Deductible`, `TenantId`, `CorrelationId`, `LicensePlate`, `Vin`, `ContentHash`, `IdempotencyKey`, `AccessPurpose` |
 | **Serviços de domínio** | `PremiumCalculationService`, `EligibilityEvaluator`, `UnderwritingService`, `CommissionEngine`, `PolicyIssuanceService`, `RenewalDetectionService` |

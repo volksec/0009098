@@ -267,8 +267,6 @@ erDiagram
     SECURITY_EVENTS ||..o{ SECURITY_EVENTS_2026_07 : "partição"
     OUTBOX_MESSAGES ||..o{ OUTBOX_2026_07          : "partição"
     OUTBOX_MESSAGES ||--o{ PROCESSED_MESSAGES      : "idempotência do consumidor"
-    AGENTS ||--|{ AGENT_SKILLS     : "declara"
-    AGENTS ||--o{ AGENT_EXECUTIONS : "executa"
 
     AUDIT_EVENTS {
         uuid id PK
@@ -316,17 +314,6 @@ erDiagram
         smallint response_status
         jsonb response_body
     }
-    AGENT_EXECUTIONS {
-        uuid id PK
-        uuid agent_id FK
-        uuid tenant_id FK
-        uuid actor_id
-        text input_redacted
-        text output_redacted
-        text_array tools_invoked
-        varchar guardrail_triggered
-        integer duration_ms
-    }
 ```
 
 ## 5. Cardinalidades e regras de exclusão
@@ -363,5 +350,4 @@ erDiagram
 
 Esta tabela é o resumo do argumento central do case: **cada invariante do modelo de objetos tem
 um par no banco**. O domínio impede que a aplicação crie estado inválido; o banco impede que
-*qualquer coisa* crie — inclusive um script manual, uma migration errada ou a API vulnerável do
-laboratório.
+*qualquer coisa* crie — inclusive um script manual, um `psql` aberto ou uma migration errada.

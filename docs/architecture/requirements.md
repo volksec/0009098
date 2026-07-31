@@ -10,8 +10,8 @@ Prioridade `M` (must, Fase 2–5), `S` (should, Fase 6–8), `C` (could, Fase 9�
 Ciclo comercial da corretagem: cadastro e manutenção de clientes e bens seguráveis; cotação
 multiplano; conversão em proposta; *underwriting* **simulado**; emissão de apólice; geração de
 parcelas; apuração de comissão; endosso; renovação; aviso e acompanhamento de sinistro;
-notificações; supervisão regulatória simulada; auditoria; observabilidade; laboratórios técnicos
-(Engineering Lab, Security Lab, Attack Simulator); agentes de IA com governança.
+notificações; supervisão regulatória simulada; auditoria; observabilidade; laboratório técnico
+(Engineering Lab).
 
 ### Fora do escopo (explicitamente)
 
@@ -31,7 +31,6 @@ notificações; supervisão regulatória simulada; auditoria; observabilidade; l
 | **Renewal Scanner** | Conta técnica | Worker diário que detecta apólices próximas do vencimento. |
 | **Billing Scheduler** | Conta técnica | Worker que avança o estado das parcelas simuladas. |
 | **Commission Engine** | Serviço de domínio | Apura comissões a partir de eventos de emissão/endosso/cancelamento. |
-| **AI Agent Runtime** | Agente de sistema | Executa os cinco agentes sob guardrails, com identidade e auditoria próprias. |
 
 Não existem personas de atendimento, produto, administração, segurança ou auditoria — essas
 funções são **capacidades internas** exercidas por contas técnicas e processos automatizados.
@@ -170,9 +169,7 @@ funções são **capacidades internas** exercidas por contas técnicas e process
 | RF-112 | **Database Explorer** — tabelas, relações, cardinalidade, agregados, mapeamento ORM, índices, constraints, RLS, partições, views | M | Lido do catálogo do PostgreSQL em tempo real |
 | RF-113 | **Query Inspector** — SQL, parâmetros mascarados, tempo, linhas, plano de execução, tipo de scan, origem no código, correlation ID | M | `EXPLAIN (ANALYZE, BUFFERS)` real; nenhum número inventado |
 | RF-114 | **Engineering Lab** — comparativos: ORM vs Dapper, com/sem índice, N+1 vs projeção, paginado vs não paginado, lazy vs eager | M | Benchmarks reais executados localmente e versionados com o ambiente de medição |
-| RF-115 | **Security Lab** e **Attack Simulator** — 18 cenários executados contra a versão vulnerável e replicados automaticamente contra a segura | M | Cada cenário mapeia CWE, OWASP Top 10 e ASVS, e aponta o teste automatizado correspondente |
-| RF-116 | Cenário de concorrência: dois processos emitindo apólice para a mesma proposta | M | Vulnerável duplica; segura bloqueia por invariante + unique + optimistic lock + idempotência |
-| RF-117 | **Recruiter Mode** — jornada guiada de 10 a 15 minutos, com foco no banco de dados | S | 20 passos conforme especificação |
+| RF-116 | Cenário de concorrência: dois processos emitindo apólice para a mesma proposta | M | Bloqueado por invariante + unique + optimistic lock + idempotência |
 
 ### 3.13 Interação com o banco e ciclo de vida do registro
 
@@ -187,16 +184,6 @@ Requisitos incorporados após a [revisão contra os 12 critérios de avaliação
 | RF-134 | **Transaction Inspector**: ciclo de vida das transações (duração, isolamento, locks, commit/rollback, eventos, Outbox, auditoria) | M | Demonstra rollback, conflito de optimistic lock, emissão concorrente e `SKIP LOCKED` com dados reais |
 | RF-135 | Monitoramento de **integridade**: métricas próprias e job diário de verificação | M | `audit_coverage_ratio` = 1.0; divergência de integridade gera alerta e aparece no dashboard de conformidade |
 
-### 3.14 Agentes de IA
-
-| ID | Requisito | Pri | Critério de aceite |
-|---|---|---|---|
-| RF-120 | Cinco agentes: Broker Copilot, Regulatory Assistant, Database Review, Architecture Review, AppSec Review | S | Cada um com skills, ferramentas permitidas e guardrails declarados |
-| RF-121 | Agente executa sob a identidade e o tenant do usuário, nunca com privilégio elevado | S | Isolamento verificado por teste |
-| RF-122 | Toda execução registrada em `AgentExecution` com entrada/saída redigidas, custo e duração | S | Limite de execução por usuário e por janela de tempo |
-| RF-123 | Defesa contra *prompt injection*: conteúdo recuperado é dado, nunca instrução | S | Teste de segurança com payload de injeção em campo sintético |
-| RF-124 | Agente regulatório não emite decisão regulatória, apenas organiza evidência | S | Recusa explícita e auditada |
-
 ## 4. Requisitos não funcionais
 
 ### 4.1 Segurança
@@ -205,14 +192,13 @@ Requisitos incorporados após a [revisão contra os 12 critérios de avaliação
 |---|---|---|
 | RNF-001 | Defesa em profundidade multi-tenant em 5 camadas: claim no token → contexto imutável de requisição → *global query filter* do EF Core → autorização por recurso → RLS no PostgreSQL | Teste de isolamento derruba cada camada isoladamente e prova que a seguinte segura |
 | RNF-002 | `tenant_id` jamais aceito de entrada do usuário (corpo, query, header, rota) | Teste de *mass assignment*; DTOs sem a propriedade |
-| RNF-003 | 100% das queries parametrizadas na aplicação segura | Análise estática + teste de SQLi no Attack Simulator |
+| RNF-003 | 100% das queries parametrizadas | Análise estática + teste de integração com payload de SQL Injection |
 | RNF-004 | Segredos fora do código e fora da imagem; injeção por Docker secrets/variáveis em runtime | Scan de segredo no CI (gitleaks) bloqueando o merge |
 | RNF-005 | Aderência a OWASP ASVS 4.0 nível 2 nos controles implementados | Matriz de rastreabilidade controle ↔ ASVS ↔ teste |
 | RNF-006 | Cabeçalhos de segurança: CSP sem `unsafe-inline`, HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` | Teste de contrato sobre as respostas |
 | RNF-007 | *Rate limiting* por IP, usuário e rota sensível | 429 com `Retry-After`; `SecurityEvent` no estouro |
-| RNF-008 | Proteção CSRF em fluxos baseados em cookie; `SameSite=Strict`, `HttpOnly`, `Secure` | Cenário CSRF no Attack Simulator |
+| RNF-008 | Proteção CSRF em fluxos baseados em cookie; `SameSite=Strict`, `HttpOnly`, `Secure` | Teste de integração dedicado |
 | RNF-009 | Log e trace **nunca** contêm senha, token, cookie, documento completo, dado pessoal completo, segredo ou *connection string* | Redação por *enricher* do Serilog + teste que varre a saída de log |
-| RNF-010 | Laboratório vulnerável isolado: profile Docker próprio, rede sem rota externa, banco separado, limites de CPU/memória, *reset* automático, aviso visual permanente | Nunca publicado; ausente do `docker compose up` padrão |
 
 ### 4.2 Integridade e estabilidade
 
@@ -243,30 +229,27 @@ Requisitos incorporados após a [revisão contra os 12 critérios de avaliação
 
 | ID | Requisito |
 |---|---|
-| RNF-040 | OpenTelemetry ponta a ponta (traces, métricas, logs) exportados via OTel Collector |
 | RNF-041 | Correlation ID propagado do frontend ao banco (via `application_name` / comentário SQL) |
 | RNF-042 | Logs estruturados em JSON com redação automática |
 | RNF-043 | Métricas obrigatórias: latência de query (média, p95, p99), queries por operação, N+1 detectadas, *seq scans*, cache hit/miss, tempo de transação, locks, deadlocks, taxa de erro, throughput, CPU, memória, eventos de domínio, mensagens de Outbox, falhas de autorização, violações de tenant, operações regulatórias, apólices emitidas, propostas aprovadas, comissões calculadas |
 | RNF-044 | Health checks `/health/live` e `/health/ready` com verificação de banco, cache e migrations |
-| RNF-045 | Alertas no Grafana para violação de tenant, pico de falha de autorização e atraso da Outbox |
 
 ### 4.5 Qualidade, operação e conformidade
 
 | ID | Requisito |
 |---|---|
-| RNF-050 | Testes: unitários, VOs, agregados, invariantes, integração (Testcontainers com PostgreSQL real), migrations, constraints, repositórios, RLS, isolamento, autorização, concorrência, idempotência, Outbox, rollback, performance, carga, E2E, arquiteturais (NetArchTest), segurança e agentes de IA |
+| RNF-050 | Testes: unitários, VOs, agregados, invariantes, integração (Testcontainers com PostgreSQL real), migrations, constraints, repositórios, RLS, isolamento, autorização, concorrência, idempotência, Outbox, rollback, performance, carga, E2E, arquiteturais (NetArchTest) e segurança |
 | RNF-051 | Cobertura mínima de 85% na camada de domínio; banco em memória **proibido** em testes de integração |
 | RNF-052 | Pipeline DevSecOps: build, testes, SAST, análise de dependências, scan de segredo, scan de imagem, SBOM e assinatura de artefato |
 | RNF-053 | Containers: multi-stage, usuário não-root, base mínima, healthcheck, filesystem somente-leitura, `cap_drop: ALL`, redes segregadas, limites de recurso |
 | RNF-054 | Migrations versionadas com script de rollback correspondente e teste de aplicação em base limpa |
 | RNF-055 | Estratégia documentada de backup, restore, retenção e anonimização |
 | RNF-056 | LGPD por concepção: minimização, finalidade, consentimento versionado, mascaramento e retenção definida |
-| RNF-057 | O GitHub Pages declara explicitamente que opera com dados sintéticos e mocks (MSW/IndexedDB), **sem** banco real |
 | RNF-058 | Acessibilidade WCAG 2.1 AA: contraste, foco visível, navegação por teclado, rótulos ARIA |
 | RNF-059 | Ambiente executável por uma pessoa em um comando (`docker compose up --build`) |
 
 ## 5. Rastreabilidade
 
 Cada RF/RNF será rastreado até: (a) o teste automatizado que o verifica, (b) o ADR que registra a
-decisão, quando houver, e (c) o passo do Recruiter Mode que o demonstra. A matriz será mantida em
+decisão, quando houver, e (c) o teste automatizado que o demonstra. A matriz será mantida em
 `docs/architecture/traceability.md` a partir da Fase 3, quando existirem testes reais para referenciar.

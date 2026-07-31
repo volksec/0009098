@@ -115,7 +115,8 @@ graph LR
 
 **Alternativo A1** — corretor tenta acessar cliente de outro tenant por ID direto: RLS + *query filter* retornam vazio; resposta `404` (não `403`, para não confirmar a existência do recurso); `SecurityEvent TENANT_VIOLATION_ATTEMPT` registrado.
 
-**Evidência ao vivo** — este é o UC usado no cenário IDOR do Attack Simulator.
+**Evidência ao vivo** — a tela *Isolamento* executa exatamente este cenário: busca um cliente real
+de outra corretora e tenta acessá-lo pelo `id`.
 
 ---
 
@@ -190,7 +191,7 @@ diferenças destacadas. Leitura pura (CQRS: projeção otimizada, sem carregar o
 - **A1** — tipo real divergente do declarado (ex.: `.pdf` que é HTML): rejeitado; `SecurityEvent UNSAFE_UPLOAD_BLOCKED`.
 - **A2** — duplicata por hash no tenant: retorna o documento existente (idempotência natural).
 
-**Evidência ao vivo** — cenário "upload inseguro" do Attack Simulator.
+**Evidência ao vivo** — coberto por teste de integração com arquivo de tipo e tamanho inválidos.
 
 ---
 
@@ -252,8 +253,7 @@ diferenças destacadas. Leitura pura (CQRS: projeção otimizada, sem carregar o
 - **A1 — emissão concorrente (cenário obrigatório):** dois processos emitem para a mesma proposta.
   Na versão segura, o perdedor falha por *optimistic lock* (`xmin` divergente); se passar,
   esbarra no índice único `ux_policies_proposal`; se repetir a requisição, a `idempotency_key`
-  devolve a resposta original. Resultado: **exatamente uma apólice**. Na versão vulnerável,
-  duas apólices são criadas e a comissão é duplicada.
+  devolve a resposta original. Resultado: **exatamente uma apólice**.
 - **A2 — falha após o passo 14:** rollback total; nenhuma apólice, parcela, comissão ou evento
   permanece. Demonstrado com falha injetada.
 - **A3 — proposta de outro tenant:** RLS retorna vazio antes mesmo da lógica; `404` + `SecurityEvent`.
@@ -289,7 +289,8 @@ projeção.
 
 **Alternativo A1** — corretor tenta consultar comissão de colega do mesmo tenant: bloqueado por
 ABAC (`broker_id` do claim ≠ dono do recurso) **e** por RLS de segunda camada. `SecurityEvent`
-registrado. Este é o cenário "consulta de comissão de outro corretor" do Attack Simulator.
+registrado. É a política `RESTRICTIVE` de `commissions` atuando sobre a de tenant: um corretor
+enxerga apenas as próprias comissões, nunca as do colega, mesmo dentro do próprio tenant.
 
 ### UC-CLM-01 — Registrar aviso de sinistro
 
@@ -378,8 +379,6 @@ auditadas com o mesmo rigor das ações humanas.
 | UC-LAB-01 | Executar operação de negócio e acompanhar os 24 passos no Live Processing Console |
 | UC-LAB-02 | Inspecionar a query real de uma operação, com plano de execução e índice utilizado |
 | UC-LAB-03 | Comparar ORM vs Dapper, com e sem índice, N+1 vs projeção — com medição real |
-| UC-LAB-04 | Executar um dos 18 cenários de ataque contra a versão vulnerável |
-| UC-LAB-05 | Replicar automaticamente o mesmo ataque contra a versão segura e ver o controle que bloqueou |
-| UC-LAB-06 | Disparar o cenário de emissão concorrente e observar o optimistic lock atuando |
-| UC-LAB-07 | Navegar do objeto de domínio até a tabela física no Database Explorer |
-| UC-LAB-08 | Percorrer o Recruiter Mode (20 passos, 10–15 min) |
+| UC-LAB-04 | Tentar acessar dado de outro tenant e ver a Row-Level Security bloqueando |
+| UC-LAB-05 | Disparar o cenário de emissão concorrente e observar o optimistic lock atuando |
+| UC-LAB-06 | Navegar do objeto de domínio até a tabela física no Database Explorer |

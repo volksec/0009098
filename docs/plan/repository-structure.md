@@ -9,23 +9,18 @@
 │   │   │   ├── features/            # vertical slices espelhando os módulos do backend
 │   │   │   │   ├── auth/  customers/  quotations/  proposals/
 │   │   │   │   ├── policies/  commissions/  claims/  regulatory/
-│   │   │   │   └── labs/            # engineering-lab, security-lab,
-│   │   │   │                        # live-console, query-inspector, db-explorer
-│   │   │   ├── lib/                 # api client, sse client, zod schemas, masking
-│   │   │   └── recruiter-mode/      # jornada guiada de 20 passos
-│   │   └── mocks/                   # MSW + IndexedDB (somente para o GitHub Pages)
+│   │   │   │   └── labs/            # engineering-lab, live-console,
+│   │   │   │                        # query-inspector, db-explorer
+│   │   │   └── lib/                 # api client, sse client, zod schemas, masking
 │   │
 │   ├── secure-api/                  # host ASP.NET Core do monólito modular
-│   ├── vulnerable-api/              # ⚠️ laboratório: falhas propositais, profile isolado
-│   ├── attack-simulator/            # 18 cenários; executa contra vulnerável e replica na segura
-│   ├── ai-agent-service/            # runtime dos 5 agentes, com guardrails
 │   └── workers/                     # Outbox Dispatcher, Renewal Scanner, Billing Scheduler
 │
 ├── modules/                         # um projeto por bounded context
 │   ├── identity/        ├── brokers/       ├── customers/     ├── products/
 │   ├── quotations/      ├── proposals/     ├── policies/      ├── billing/
 │   ├── commissions/     ├── claims/        ├── documents/     ├── notifications/
-│   ├── regulatory/      ├── auditing/      ├── observability/ └── ai/
+│   ├── regulatory/      ├── auditing/      └── observability/
 │   │
 │   └── <cada módulo>/
 │       ├── PortalDoCorretor.<Modulo>.Domain/          # sem dependência de framework
@@ -43,9 +38,7 @@
 │   │   ├── migrations/              # cada migration com Up e Down funcionais
 │   │   ├── scripts/                 # RLS, tipos compostos, partições, funções, triggers
 │   │   ├── seeds/                   # massa sintética determinística (seed fixa)
-│   │   └── backups/                 # scripts de backup, restore e anonimização
-│   └── vulnerable/                  # ⚠️ mesmo esquema SEM constraints, índices e RLS
-│       ├── migrations/  ├── seeds/  └── scripts/
+│       └── backups/                 # scripts de backup, restore e anonimização
 │
 ├── tests/
 │   ├── unit/                        # VOs, agregados, invariantes, serviços de domínio
@@ -54,20 +47,20 @@
 │   ├── contract/                    # contratos de API e cabeçalhos de segurança
 │   ├── e2e/                         # Playwright, fluxos ponta a ponta
 │   ├── performance/                 # benchmarks reais (k6 + BenchmarkDotNet)
-│   └── security/                    # isolamento, autorização, RLS, os 18 cenários
+│   └── security/                    # isolamento, autorização, RLS
 │
 ├── docs/
 │   ├── architecture/  adr/  c4/  uml/  domain/  database/
-│   ├── threat-model/  security/  benchmarks/  recruiter-mode/  plan/
+│   ├── threat-model/  security/  benchmarks/  plan/
 │
 ├── infrastructure/
 │   ├── docker/                      # Dockerfiles multi-stage, não-root, read-only
-│   ├── compose/                     # docker-compose.yml + profile security-lab
-│   ├── monitoring/                  # otel collector, prometheus, grafana, loki, tempo
-│   └── scripts/                     # bootstrap, reset do lab, geração de massa
+│   ├── compose/                     # docker-compose.yml
+│   ├── ci/                          # workflow de integração contínua
+│   └── scripts/                     # bootstrap e geração de massa
 │
 ├── .github/
-│   ├── workflows/                   # ci, security, benchmarks, pages
+│   ├── workflows/                   # ci, security, benchmarks
 │   ├── ISSUE_TEMPLATE/
 │   └── PULL_REQUEST_TEMPLATE.md
 │
@@ -87,7 +80,6 @@
 | 5 | `regulatory` não contém nenhum command handler | Houver tipo implementando `ICommandHandler` no módulo |
 | 6 | Toda entidade `ITenantScoped` tem query filter configurado | Faltar `HasQueryFilter` no mapeamento |
 | 7 | Nenhum agregado expõe coleção mutável pública | Propriedade retornar `List<T>` em vez de `IReadOnlyCollection<T>` |
-| 8 | `vulnerable-api` não é referenciada por nenhum projeto de produção | Houver referência a partir de `secure-api` |
 
-As regras 5 a 8 são específicas deste case: transformam decisões de segurança e modelagem em
+As regras 5 a 7 são específicas deste case: transformam decisões de segurança e modelagem em
 falhas de compilação, em vez de convenções que erodem.

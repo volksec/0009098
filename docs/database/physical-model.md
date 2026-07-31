@@ -448,7 +448,7 @@ CREATE TABLE policy_coverages (
 ```
 
 Três camadas independentes impedem a emissão duplicada: a invariante no agregado `Policy`, o
-índice `ux_policies_proposal` e a `Idempotency-Key`. O Security Lab derruba uma de cada vez para
+índice `ux_policies_proposal` e a `Idempotency-Key`. Os testes de integração derrubam uma de cada vez para
 mostrar que as demais seguram — é a demonstração de defesa em profundidade aplicada a
 integridade, não só a segurança.
 
@@ -648,23 +648,6 @@ CREATE TABLE security_events (
     details       jsonb,                 -- JSONB-JUSTIFICATION: forma varia por tipo de evento
     PRIMARY KEY (id, occurred_at)
 ) PARTITION BY RANGE (occurred_at);
-
-CREATE TABLE agent_executions (
-    id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id      uuid NOT NULL REFERENCES brokerages(id),
-    agent_id       uuid NOT NULL REFERENCES agents(id),
-    actor_id       uuid NOT NULL,
-    correlation_id uuid NOT NULL,
-    input_redacted   text NOT NULL,
-    output_redacted  text,
-    tools_invoked  text[],
-    tokens_input   integer,
-    tokens_output  integer,
-    duration_ms    integer,
-    outcome        varchar(20) NOT NULL,
-    guardrail_triggered varchar(80),
-    created_at     timestamptz NOT NULL DEFAULT now()
-);
 
 CREATE TABLE regulatory_access_sessions (
     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),

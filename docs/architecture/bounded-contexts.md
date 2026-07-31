@@ -270,10 +270,9 @@ O monólito modular foi escolhido para ser construível e mantível por uma pess
 contexto precisar escalar de forma independente no futuro, a extração segue esta ordem de menor
 atrito, já preparada pelas fronteiras atuais:
 
-1. **AI** — já é um serviço separado (`ai-agent-service`), sem estado transacional compartilhado.
-2. **Documents** — fronteira estreita, comunicação já assíncrona, candidato natural a *object storage*.
-3. **Notifications** — puramente reativo a eventos; a Outbox já existe como ponte.
-4. **Regulatory** — somente-leitura; poderia consumir uma réplica de leitura dedicada.
+1. **Documents** — fronteira estreita, comunicação já assíncrona, candidato natural a *object storage*.
+2. **Notifications** — puramente reativo a eventos; a Outbox já existe como ponte.
+3. **Regulatory** — somente-leitura; poderia consumir uma réplica de leitura dedicada.
 
 Core Domain (Quotations, Proposals, Policies, Commissions) **não** deve ser extraído: as
 invariantes de emissão exigem transação única, e distribuí-las trocaria consistência forte por

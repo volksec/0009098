@@ -296,7 +296,7 @@ export function connectEventStream(
     'ApplicationLog', 'DomainEvent', 'DatabaseQuery', 'Transaction',
     'AuthorizationDecision', 'RowLevelSecurity', 'CacheEvent', 'OutboxEvent',
     'BackgroundJob', 'IntegrationEvent', 'AuditEvent', 'SecurityEvent',
-    'AiAgentEvent', 'Error', 'Retry', 'CircuitBreaker',
+    'Error', 'Retry', 'CircuitBreaker',
   ]
 
   const handler = (event: MessageEvent) => {

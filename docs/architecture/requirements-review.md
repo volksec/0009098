@@ -18,9 +18,8 @@ lacunas, não confirmar o que já estava pronto.
 | 9 | Auditoria completa | ✅ Coberto | `audit_events` particionado, append-only por `REVOKE`, na mesma transação da operação |
 | 10 | Segurança da modelagem à persistência | ✅ Coberto | 5 camadas (ADR-0004), `TenantId` sem construtor público, RLS com `FORCE` |
 | 11 | Monitoramento de performance, integridade, concorrência, estabilidade | ⚠️ **Parcial** | Performance, concorrência e estabilidade cobertas em RNF-030..034 e RNF-043. **Integridade não tinha métrica própria** → **RF-135** |
-| 12 | Comparação em tempo real seguro vs vulnerável | ✅ Coberto | RF-115, RF-116, ADR-0009, réplica automática |
 
-**Placar: 7 cobertos, 5 com lacuna.** As cinco lacunas viraram requisitos novos, detalhados abaixo,
+**Placar: 6 cobertos, 5 com lacuna.** As cinco lacunas viraram requisitos novos, detalhados abaixo,
 e foram incorporadas ao plano da Fase 6 (frontend) e Fase 7 (observabilidade).
 
 ---
@@ -46,8 +45,7 @@ abrir um cliente SQL externo.
 **Decisão de segurança deliberada:** não existe campo de SQL livre para o usuário. Um console SQL
 seria a forma mais rápida de demonstrar o banco e a mais irresponsável de construir a aplicação —
 transformaria a tela em RCE de banco de dados. O Data Browser demonstra o mesmo (dados reais,
-queries reais, planos reais) sem abrir a superfície. Um SQL livre existe **apenas** na
-`vulnerable-api`, como cenário de SQL Injection do Security Lab.
+queries reais, planos reais) sem abrir a superfície.
 
 ### RF-131 — Exclusão lógica como capacidade transversal
 

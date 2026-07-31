@@ -492,15 +492,13 @@ regra vigente e a mensagem de outbox — ou nada disso.
 ├── apps/
 │   ├── frontend/                 React · TypeScript · Vite · design system próprio
 │   ├── secure-api/               Host ASP.NET Core do monólito modular
-│   ├── vulnerable-api/           Contraparte para comparação (profile security-lab)
-│   ├── attack-simulator/         18 cenários executados contra as duas APIs
 │   └── workers/                  Outbox Dispatcher · Renewal Scanner · Billing Scheduler
 │
 ├── modules/                      Um projeto por bounded context
 │   ├── identity/    brokers/     customers/    products/
 │   ├── quotations/  proposals/   policies/     billing/
 │   ├── commissions/ claims/      documents/    notifications/
-│   ├── regulatory/  auditing/    observability/  ai/
+│   ├── regulatory/  auditing/
 │   │
 │   └── <módulo>/
 │       ├── Domain/               Sem dependência de framework
@@ -518,8 +516,7 @@ regra vigente e a mensagem de outbox — ou nada disso.
 │   │   ├── migrations/           9 migrations versionadas
 │   │   ├── rollback/             Script de reversão por migration
 │   │   ├── scripts/              Init de papéis, extensões, contexto de tenant
-│   │   └── seeds/                Massa determinística
-│   └── vulnerable/               Mesmo domínio sem constraints, índices e RLS
+│       └── seeds/                Massa determinística
 │
 ├── tests/
 │   ├── unit/          integration/   architecture/
@@ -551,7 +548,6 @@ code review.
 | 5 | O módulo `regulatory` não contém nenhum command handler |
 | 6 | Toda entidade `ITenantScoped` tem query filter configurado |
 | 7 | Nenhum agregado expõe coleção mutável pública |
-| 8 | Nenhum projeto de produção referencia a API vulnerável |
 
 ---
 
@@ -582,7 +578,6 @@ graph TB
 
     subgraph app["Rede: pdc-app (interna)"]
         API["<b>secure-api</b><br/>ASP.NET Core 9 · :8080"]
-        AI["<b>ai-agent-service</b>"]
         WRK["<b>workers</b><br/>Outbox · Renewal · Billing"]
     end
 
@@ -591,27 +586,11 @@ graph TB
         RD[("<b>redis</b> · :6379")]
     end
 
-    subgraph lab["Rede: pdc-lab (internal · profile security-lab)"]
-        VAPI["<b>vulnerable-api</b>"]
-        VPG[("<b>vulnerable-database</b>")]
-        ATK["<b>attack-simulator</b>"]
-    end
-
-    subgraph obs["Rede: pdc-observability"]
-        OTEL["otel-collector"] --> PROM["prometheus"] & LOKI["loki"] & TEMPO["tempo"]
-        GRAF["grafana · :3000"] --> PROM & LOKI & TEMPO
-    end
-
     U --> FE -->|"REST + SSE"| API
-    API --> PG & RD & AI
+    API --> PG & RD
     WRK --> PG
-    API & AI & WRK -->|OTLP| OTEL
-    ATK --> VAPI --> VPG
-    ATK -->|"replica o mesmo teste"| API
 
-    classDef labc fill:#F2A93B,stroke:#B87A18,color:#141821
     classDef sec fill:#1F6FEB,stroke:#0B2447,color:#fff
-    class VAPI,VPG,ATK labc
     class API,PG sec
 ```
 
@@ -632,7 +611,7 @@ toda a lógica de negócio sem banco, sem HTTP e sem mock de framework.
 |---|---|
 | **Core** | Quotations · Proposals · Policies · Commissions |
 | **Supporting** | Customer Management · Broker Management · Product Catalog · Claims · Billing · Regulatory Supervision |
-| **Generic** | Identity and Access · Documents · Notifications · Audit and Compliance · Observability · AI |
+| **Generic** | Identity and Access · Documents · Notifications · Audit and Compliance |
 
 [Mapa de contexto completo](docs/architecture/bounded-contexts.md)
 
@@ -640,12 +619,12 @@ toda a lógica de negócio sem banco, sem HTTP e sem mock de framework.
 
 | Camada | Escolha | Racional |
 |---|---|---|
-| **Backend** | .NET 9, ASP.NET Core (Minimal API), EF Core, Dapper, FluentValidation, Serilog, OpenTelemetry, Polly | Tipos fortes o bastante para expressar Value Objects e agregados; EF Core fornece *owned types*, query filters globais e `xmin` nativo; Dapper entra em leitura analítica, onde o ORM não agrega |
+| **Backend** | .NET 9, ASP.NET Core (Minimal API), EF Core, Dapper, FluentValidation, Serilog, Polly | Tipos fortes o bastante para expressar Value Objects e agregados; EF Core fornece *owned types*, query filters globais e `xmin` nativo; Dapper entra em leitura analítica, onde o ORM não agrega |
 | **Frontend** | React, TypeScript, Vite, Tailwind, shadcn/ui, TanStack Query, React Hook Form + Zod, Storybook, Cytoscape.js, Monaco | Tipagem ponta a ponta; componentes shadcn ficam no repositório, então o design system é próprio; Cytoscape para o grafo do Database Explorer; Monaco para SQL e planos de execução |
 | **Dados** | PostgreSQL 16, Redis | Detalhado na [seção 6](#6-banco-objeto-relacional) |
 | **Mensageria** | Nenhuma — Outbox no PostgreSQL | Broker externo não oferece garantia transacional sem 2PC ([ADR-0007](docs/adr/0007-sem-message-broker.md)) |
 | **Testes** | xUnit, FluentAssertions, FsCheck, Testcontainers, Respawn, NetArchTest | PostgreSQL real nos testes de integração: RLS, `EXCLUDE`, tipos compostos e `xmin` não existem em banco em memória |
-| **Infra** | Docker Compose, GitHub Actions, Prometheus, Grafana, Loki, Tempo | Ambiente completo em um comando |
+| **Infra** | Docker Compose, GitHub Actions | Ambiente completo em um comando |
 
 [Alternativas descartadas e trade-offs](docs/architecture/overview.md)
 
@@ -932,22 +911,13 @@ externo — a função de decifragem falha fechado quando a chave não está pre
 `DELETE` físico é revogado da aplicação — a exclusão é lógica, com motivo obrigatório e cascata
 aplicada pelo agregado.
 
-### Superfície de teste de segurança
-
-O `attack-simulator` executa 18 cenários (SQL Injection, IDOR, broken access control, manipulação
-de tenant, mass assignment, race condition, emissão duplicada, upload inseguro, entre outros)
-contra a API vulnerável e replica cada um contra a segura, registrando o controle que atuou, o
-`SecurityEvent` gerado e o mapeamento para CWE, OWASP e ASVS.
-
-O ambiente vulnerável é isolado por profile Docker, em rede `internal: true`, com reset automático
-e limites de recurso. ([ADR-0009](docs/adr/0009-laboratorio-vulneravel-isolado.md))
-
 ---
 
 ## 13. Observabilidade
 
-OpenTelemetry ponta a ponta (traces, métricas, logs) via OTel Collector para Prometheus, Loki e
-Tempo, visualizados no Grafana. Correlation ID propagado do frontend até o banco.
+Correlation ID propagado do frontend até o banco: gerado na borda se ausente, devolvido em toda
+resposta e gravado em cada evento de domínio, o que permite reconstruir uma operação inteira a
+partir de um único identificador.
 
 | Categoria | Métricas |
 |---|---|
@@ -1038,7 +1008,6 @@ local, publicados com a especificação da máquina, versão do PostgreSQL e vol
 | [0006](docs/adr/0006-outbox-transacional.md) | Outbox transacional no PostgreSQL |
 | [0007](docs/adr/0007-sem-message-broker.md) | Sem message broker externo |
 | [0008](docs/adr/0008-cqrs-seletivo.md) | CQRS seletivo, sem event sourcing |
-| [0009](docs/adr/0009-laboratorio-vulneravel-isolado.md) | Ambiente de comparação isolado por profile |
 
 ### Documentação técnica
 
