@@ -56,6 +56,75 @@ BEGIN
             jsonb_build_object('type','object'), now(), daterange('2026-01-01','2027-01-01'))
     ON CONFLICT DO NOTHING;
 
+    -- Coberturas do produto de automóvel. As obrigatórias não podem ser desmarcadas
+    -- na cotação — a invariante vive no agregado Quotation.
+    INSERT INTO coverages (id, product_version_id, code, name, description, is_mandatory,
+           min_limit, max_limit, default_deductible, rate_factor) VALUES
+        (md5('pdc:cov:auto:collision')::uuid, md5('pdc:pv:auto:1')::uuid,
+         'COLLISION', 'Colisão e capotagem',
+         'Danos ao veículo segurado em colisão, capotagem ou abalroamento', true,
+         ROW(10000,'BRL')::money_amount, ROW(500000,'BRL')::money_amount,
+         ROW('PERCENTAGE', NULL, 0.05)::deductible, 0.028),
+
+        (md5('pdc:cov:auto:theft')::uuid, md5('pdc:pv:auto:1')::uuid,
+         'THEFT', 'Roubo e furto',
+         'Indenização integral em caso de roubo ou furto do veículo', true,
+         ROW(10000,'BRL')::money_amount, ROW(500000,'BRL')::money_amount,
+         ROW('FIXED', 0, NULL)::deductible, 0.014),
+
+        (md5('pdc:cov:auto:thirdparty')::uuid, md5('pdc:pv:auto:1')::uuid,
+         'THIRD_PARTY', 'Danos a terceiros',
+         'Responsabilidade civil por danos materiais e corporais a terceiros', true,
+         ROW(50000,'BRL')::money_amount, ROW(1000000,'BRL')::money_amount,
+         ROW('FIXED', 1500, NULL)::deductible, 0.009),
+
+        (md5('pdc:cov:auto:glass')::uuid, md5('pdc:pv:auto:1')::uuid,
+         'GLASS', 'Vidros e faróis',
+         'Reparo ou troca de vidros, faróis e retrovisores', false,
+         ROW(1000,'BRL')::money_amount, ROW(15000,'BRL')::money_amount,
+         ROW('FIXED', 250, NULL)::deductible, 0.004),
+
+        (md5('pdc:cov:auto:naturalevents')::uuid, md5('pdc:pv:auto:1')::uuid,
+         'NATURAL_EVENTS', 'Eventos da natureza',
+         'Alagamento, granizo, queda de árvore e demais eventos naturais', false,
+         ROW(10000,'BRL')::money_amount, ROW(500000,'BRL')::money_amount,
+         ROW('PERCENTAGE', NULL, 0.03)::deductible, 0.006),
+
+        (md5('pdc:cov:auto:driver')::uuid, md5('pdc:pv:auto:1')::uuid,
+         'DRIVER_PA', 'Acidentes pessoais de passageiros',
+         'Morte acidental e invalidez permanente de ocupantes', false,
+         ROW(5000,'BRL')::money_amount, ROW(200000,'BRL')::money_amount,
+         ROW('FIXED', 0, NULL)::deductible, 0.003)
+    ON CONFLICT DO NOTHING;
+
+    -- Coberturas do produto residencial
+    INSERT INTO coverages (id, product_version_id, code, name, description, is_mandatory,
+           min_limit, max_limit, default_deductible, rate_factor) VALUES
+        (md5('pdc:cov:res:fire')::uuid, md5('pdc:pv:residential:1')::uuid,
+         'FIRE', 'Incêndio, raio e explosão',
+         'Danos ao imóvel e conteúdo por incêndio, queda de raio ou explosão', true,
+         ROW(50000,'BRL')::money_amount, ROW(2000000,'BRL')::money_amount,
+         ROW('FIXED', 1000, NULL)::deductible, 0.006),
+
+        (md5('pdc:cov:res:theft')::uuid, md5('pdc:pv:residential:1')::uuid,
+         'BURGLARY', 'Roubo de bens',
+         'Subtração de bens mediante arrombamento ou grave ameaça', false,
+         ROW(10000,'BRL')::money_amount, ROW(300000,'BRL')::money_amount,
+         ROW('PERCENTAGE', NULL, 0.10)::deductible, 0.009),
+
+        (md5('pdc:cov:res:electrical')::uuid, md5('pdc:pv:residential:1')::uuid,
+         'ELECTRICAL', 'Danos elétricos',
+         'Queima de equipamentos por variação de tensão', false,
+         ROW(2000,'BRL')::money_amount, ROW(50000,'BRL')::money_amount,
+         ROW('FIXED', 500, NULL)::deductible, 0.005),
+
+        (md5('pdc:cov:res:liability')::uuid, md5('pdc:pv:residential:1')::uuid,
+         'LIABILITY', 'Responsabilidade civil familiar',
+         'Danos involuntários causados a terceiros pelo segurado ou familiares', false,
+         ROW(20000,'BRL')::money_amount, ROW(500000,'BRL')::money_amount,
+         ROW('FIXED', 750, NULL)::deductible, 0.004)
+    ON CONFLICT DO NOTHING;
+
     INSERT INTO commission_rules (product_id, version, rate, base_on, valid_period) VALUES
         (v_auto, 1, 0.15, 'NET_PREMIUM', daterange('2026-01-01','2027-01-01')),
         (v_res,  1, 0.20, 'NET_PREMIUM', daterange('2026-01-01','2027-01-01'))
