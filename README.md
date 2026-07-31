@@ -494,7 +494,6 @@ regra vigente e a mensagem de outbox — ou nada disso.
 │   ├── secure-api/               Host ASP.NET Core do monólito modular
 │   ├── vulnerable-api/           Contraparte para comparação (profile security-lab)
 │   ├── attack-simulator/         18 cenários executados contra as duas APIs
-│   ├── ai-agent-service/         Runtime dos agentes, com guardrails
 │   └── workers/                  Outbox Dispatcher · Renewal Scanner · Billing Scheduler
 │
 ├── modules/                      Um projeto por bounded context
@@ -1041,7 +1040,6 @@ local, publicados com a especificação da máquina, versão do PostgreSQL e vol
 | [0007](docs/adr/0007-sem-message-broker.md) | Sem message broker externo |
 | [0008](docs/adr/0008-cqrs-seletivo.md) | CQRS seletivo, sem event sourcing |
 | [0009](docs/adr/0009-laboratorio-vulneravel-isolado.md) | Ambiente de comparação isolado por profile |
-| [0010](docs/adr/0010-governanca-de-agentes-de-ia.md) | Agentes de IA com privilégio mínimo |
 
 ### Documentação técnica
 
