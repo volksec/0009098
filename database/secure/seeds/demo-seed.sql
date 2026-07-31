@@ -306,8 +306,8 @@ BEGIN
                                 ROW(v_item_total,'BRL')::money_amount,
                                 now() - interval '14 days');
 
-                        -- Rateio das coberturas: a última absorve o resto para que a
-                        -- soma feche com o prêmio do plano, sem centavo perdido
+                        -- Rateio das coberturas sobre o prêmio LÍQUIDO: o carregamento
+                        -- incide sobre o conjunto e não pertence a nenhuma cobertura
                         v_acc := 0; v_cov_i := 0;
                         FOR v_cov IN
                             SELECT id, (min_limit).amount AS min_l, (max_limit).amount AS max_l,
@@ -318,9 +318,11 @@ BEGIN
                         LOOP
                             v_cov_i := v_cov_i + 1;
                             IF v_cov_i = v_cov_total THEN
-                                v_cov_prem := v_item_total - v_acc;
+                                -- A última absorve o resto: sem isso o arredondamento
+                                -- deixaria centavos fora da soma
+                                v_cov_prem := v_item_net - v_acc;
                             ELSE
-                                v_cov_prem := round(v_item_total / v_cov_total, 2);
+                                v_cov_prem := round(v_item_net / v_cov_total, 2);
                                 v_acc := v_acc + v_cov_prem;
                             END IF;
 
