@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   api, onRequest, probeCrossTenant,
-  type Brokerage, type Customer, type DashboardSummary,
+  type Brokerage, type DashboardSummary,
   type Invariant, type LastRequest, type Policy, type RlsPolicy, type SchemaStats,
 } from './api'
+import { CustomerAdmin } from './CustomerAdmin'
+import { LiveConsole } from './LiveConsole'
 
-type Page = 'dashboard' | 'customers' | 'policies' | 'engineering' | 'isolation'
+type Page = 'dashboard' | 'admin' | 'policies' | 'console' | 'engineering' | 'isolation'
 
-const PAGES: { id: Page; label: string }[] = [
-  { id: 'dashboard', label: 'Painel' },
-  { id: 'customers', label: 'Clientes' },
-  { id: 'policies', label: 'Apólices' },
-  { id: 'engineering', label: 'Banco de dados' },
-  { id: 'isolation', label: 'Isolamento' },
+const PAGES: { id: Page; label: string; group?: string }[] = [
+  { id: 'dashboard', label: 'Painel', group: 'Operação' },
+  { id: 'admin', label: 'Administração', group: 'Operação' },
+  { id: 'policies', label: 'Apólices', group: 'Operação' },
+  { id: 'console', label: 'Live Console', group: 'Engenharia' },
+  { id: 'engineering', label: 'Banco de dados', group: 'Engenharia' },
+  { id: 'isolation', label: 'Isolamento', group: 'Engenharia' },
 ]
 
 const money = (value: number) =>
@@ -126,65 +129,6 @@ function DashboardPage({ tenantId }: { tenantId: string }) {
         visível — a consulta é a mesma.
       </div>
     </>
-  )
-}
-
-function CustomersPage({ tenantId }: { tenantId: string }) {
-  const [term, setTerm] = useState('')
-  const [applied, setApplied] = useState('')
-  const { data, loading, error } = useAsync<Customer[]>(
-    () => api.customers(tenantId, applied || undefined), [tenantId, applied])
-
-  return (
-    <Panel
-      title="Clientes"
-      subtitle="Busca full-text por tsvector, com consulta parametrizada"
-      action={
-        <form
-          onSubmit={(event) => { event.preventDefault(); setApplied(term) }}
-          style={{ display: 'flex', gap: 8 }}
-        >
-          <input
-            className="search"
-            placeholder="Buscar por nome…"
-            value={term}
-            onChange={(event) => setTerm(event.target.value)}
-          />
-          <button className="btn" type="submit">Buscar</button>
-        </form>
-      }
-    >
-      {loading && <div className="state">Carregando…</div>}
-      {error && <div className="state">Falha: {error}</div>}
-      {data && data.length === 0 && <div className="state">Nenhum cliente encontrado.</div>}
-
-      {data && data.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>Nome</th><th>Tipo</th><th>Corretor</th>
-              <th className="num">Bens</th><th className="num">Apólices</th><th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((customer) => (
-              <tr key={customer.id}>
-                <td>{customer.displayName}</td>
-                <td>
-                  <span className={`badge ${customer.kind === 'BUSINESS' ? 'info' : 'muted'}`}>
-                    {customer.kind === 'BUSINESS' ? 'PJ' : 'PF'}
-                  </span>
-                </td>
-                <td>{customer.brokerName}</td>
-                <td className="num">{customer.assetCount}</td>
-                <td className="num">{customer.activePolicies}</td>
-                <td><StatusBadge status={customer.status} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </Panel>
   )
 }
 
@@ -326,10 +270,10 @@ function IsolationPage({ tenantId, brokerages }: { tenantId: string; brokerages:
     setResult(null)
     try {
       // Pega um cliente REAL do outro tenant e tenta acessá-lo com o tenant corrente
-      const foreign = await api.customers(targetTenant)
-      if (foreign.length === 0) { setRunning(false); return }
+      const foreign = await api.customers(targetTenant, { pageSize: 1 })
+      if (foreign.items.length === 0) { setRunning(false); return }
 
-      const victim = foreign[0]
+      const victim = foreign.items[0]
       const probe = await probeCrossTenant(tenantId, victim.id)
       setResult({ status: probe.status, durationMs: probe.durationMs, id: victim.id })
     } finally {
@@ -412,8 +356,15 @@ export default function App() {
 
   const heading: Record<Page, { title: string; subtitle: string }> = {
     dashboard: { title: 'Painel do corretor', subtitle: 'Indicadores da carteira no tenant selecionado' },
-    customers: { title: 'Clientes', subtitle: 'Carteira da corretora, filtrada pela Row-Level Security' },
+    admin: {
+      title: 'Administração de clientes',
+      subtitle: 'Cadastro, edição e exclusão lógica persistidos diretamente no PostgreSQL',
+    },
     policies: { title: 'Apólices', subtitle: 'Contratos emitidos e suas vigências' },
+    console: {
+      title: 'Live Processing Console',
+      subtitle: 'Eventos internos da aplicação em tempo real, via Server-Sent Events',
+    },
     engineering: { title: 'Banco de dados', subtitle: 'Estrutura lida do catálogo do PostgreSQL em tempo real' },
     isolation: { title: 'Isolamento', subtitle: 'Demonstração executável do controle multi-tenant' },
   }
@@ -467,7 +418,8 @@ export default function App() {
         {!tenantId && <div className="state">Carregando corretoras…</div>}
 
         {tenantId && page === 'dashboard' && <DashboardPage tenantId={tenantId} />}
-        {tenantId && page === 'customers' && <CustomersPage tenantId={tenantId} />}
+        {tenantId && page === 'admin' && <CustomerAdmin key={tenantId} tenantId={tenantId} />}
+        {page === 'console' && <LiveConsole />}
         {tenantId && page === 'policies' && <PoliciesPage tenantId={tenantId} />}
         {page === 'engineering' && <EngineeringPage />}
         {tenantId && page === 'isolation' && (
