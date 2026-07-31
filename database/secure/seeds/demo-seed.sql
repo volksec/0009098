@@ -152,6 +152,16 @@ DECLARE
     v_plate text;
     v_is_business boolean;
     v_premium numeric(14,2);
+    v_item uuid;
+    v_plan_code text;
+    v_mult numeric;
+    v_cov record;
+    v_cov_total int;
+    v_cov_i int;
+    v_cov_prem numeric(14,2);
+    v_acc numeric(14,2);
+    v_item_total numeric(14,2);
+    v_item_net numeric(14,2);
     v_net numeric(14,2);
     v_start date;
     v_name text;
@@ -260,6 +270,72 @@ BEGIN
                             150 + ((c * 53) % 600), '00000000-0000-0000-0000-000000000001',
                             now() + interval '30 days');
 
+                    -- Os três planos da cotação. COMPLETE vale exatamente v_premium,
+                    -- que é o valor que a proposta e a apólice herdam — assim a
+                    -- verificação POLICY_PREMIUM_MISMATCH continua zerada.
+                    SELECT count(*) INTO v_cov_total
+                      FROM coverages WHERE product_version_id = v_pv AND is_mandatory;
+
+                    FOREACH v_plan_code IN ARRAY ARRAY['ESSENTIAL','COMPLETE','MASTER'] LOOP
+                        v_mult := CASE v_plan_code WHEN 'ESSENTIAL' THEN 0.85
+                                                   WHEN 'COMPLETE'  THEN 1.00
+                                                   ELSE 1.28 END;
+                        v_item := gen_random_uuid();
+                        v_item_total := round(v_premium * v_mult, 2);
+                        v_item_net   := round(v_item_total * 0.82, 2);
+
+                        INSERT INTO quotation_items (id, quotation_id, plan, net_premium, total_premium)
+                        VALUES (v_item, v_quotation, v_plan_code::plan_tier,
+                                ROW(v_item_net,'BRL')::money_amount,
+                                ROW(v_item_total,'BRL')::money_amount);
+
+                        INSERT INTO calculation_snapshots (id, quotation_item_id, engine_version,
+                               inputs, risk_multiplier, plan_multiplier, base_premium,
+                               final_premium, calculated_at)
+                        VALUES (gen_random_uuid(), v_item, '1.0.0',
+                                jsonb_build_object(
+                                    'baseRate', 0.0180,
+                                    'riskScore', 150 + ((c * 53) % 600),
+                                    'riskSensitivity', 0.35,
+                                    'planMultiplier', v_mult,
+                                    'loadingRate', 0.22,
+                                    'seeded', true),
+                                round(1 + ((150 + ((c * 53) % 600))::numeric / 1000) * 0.35, 6),
+                                v_mult,
+                                ROW(v_item_net,'BRL')::money_amount,
+                                ROW(v_item_total,'BRL')::money_amount,
+                                now() - interval '14 days');
+
+                        -- Rateio das coberturas: a última absorve o resto para que a
+                        -- soma feche com o prêmio do plano, sem centavo perdido
+                        v_acc := 0; v_cov_i := 0;
+                        FOR v_cov IN
+                            SELECT id, (min_limit).amount AS min_l, (max_limit).amount AS max_l,
+                                   default_deductible AS ded
+                              FROM coverages
+                             WHERE product_version_id = v_pv AND is_mandatory
+                             ORDER BY code
+                        LOOP
+                            v_cov_i := v_cov_i + 1;
+                            IF v_cov_i = v_cov_total THEN
+                                v_cov_prem := v_item_total - v_acc;
+                            ELSE
+                                v_cov_prem := round(v_item_total / v_cov_total, 2);
+                                v_acc := v_acc + v_cov_prem;
+                            END IF;
+
+                            INSERT INTO selected_coverages (id, quotation_item_id, coverage_id,
+                                   limit_amount, deductible, premium)
+                            VALUES (gen_random_uuid(), v_item, v_cov.id,
+                                    ROW(least(greatest(round(
+                                        (CASE WHEN v_is_business THEN 180000 + (c * 17000)
+                                              ELSE 45000 + (c * 3500) END)::numeric * v_mult, 2),
+                                        v_cov.min_l), v_cov.max_l), 'BRL')::money_amount,
+                                    v_cov.ded,
+                                    ROW(v_cov_prem,'BRL')::money_amount);
+                        END LOOP;
+                    END LOOP;
+
                     IF (c % 5) > 0 THEN
                         v_proposal := gen_random_uuid();
 
@@ -291,6 +367,29 @@ BEGIN
                                     'ACTIVE', daterange(v_start, v_start + 365),
                                     ROW(v_net,'BRL')::money_amount, ROW(v_premium,'BRL')::money_amount,
                                     '00000000-0000-0000-0000-000000000001', gen_random_uuid());
+
+                            -- Coberturas CONGELADAS: copiadas do plano COMPLETE da cotação.
+                            -- Uma apólice sem cobertura não segura nada, e é justamente o que
+                            -- a verificação POLICY_WITHOUT_COVERAGE acusa.
+                            INSERT INTO policy_coverages (id, tenant_id, policy_id, coverage_id,
+                                   limit_amount, deductible, premium, is_mandatory)
+                            SELECT gen_random_uuid(), v_tenant, v_policy, sc.coverage_id,
+                                   sc.limit_amount, sc.deductible, sc.premium, true
+                              FROM selected_coverages sc
+                              JOIN quotation_items qi ON qi.id = sc.quotation_item_id
+                             WHERE qi.quotation_id = v_quotation AND qi.plan = 'COMPLETE';
+
+                            -- Trilha de auditoria da emissão: sem ela a cobertura de
+                            -- auditoria não fecha em 1.0 (POLICY_WITHOUT_AUDIT)
+                            INSERT INTO audit_events (id, occurred_at, tenant_id, correlation_id,
+                                   actor_id, actor_profile, action, resource_type, resource_id,
+                                   outcome, duration_ms, after_state)
+                            VALUES (gen_random_uuid(), now() - interval '6 days', v_tenant,
+                                    gen_random_uuid(),
+                                    '00000000-0000-0000-0000-000000000001', 'BROKER',
+                                    'POLICY_ISSUED', 'Policy', v_policy, 'SUCCESS', 42,
+                                    jsonb_build_object('status','ACTIVE',
+                                                       'totalPremium', v_premium));
 
                             -- Parcelas: a soma precisa bater com o prêmio (constraint trigger)
                             INSERT INTO installment_plans (id, tenant_id, policy_id, total_amount, installment_count)
