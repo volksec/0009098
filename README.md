@@ -217,6 +217,7 @@ Resposta esperada: `{"status":"ready","tables":71}`
 
 | Método | Rota | Descrição |
 |---|---|---|
+| `GET` | `/api` | Índice: rotas, cabeçalhos e por onde começar |
 | `GET` | `/api/brokerages` | Corretoras (tenants) |
 | `GET` | `/api/brokers` | Corretores do tenant |
 | `GET` | `/api/customers` | Clientes — paginação, busca, filtros |

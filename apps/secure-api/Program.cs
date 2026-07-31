@@ -79,6 +79,48 @@ app.MapGet("/api/brokerages", async (IDbConnectionFactory factory) =>
         """));
 }).WithTags("Corretoras");
 
+// ---------------------------------------------------------------- índice da API
+// `/api` é prefixo de rota, não rota: sem isto, quem abrisse a URL anunciada pelo
+// start.sh recebia 404 e concluía que a API estava fora. O índice devolve o mapa
+// real e o cabeçalho que a maioria das rotas exige.
+app.MapGet("/api", (HttpContext http) =>
+{
+    var raiz = $"{http.Request.Scheme}://{http.Request.Host}";
+
+    return Results.Ok(new
+    {
+        nome = "Portal do Corretor — API",
+        documentacao = $"{raiz}/swagger",
+        especificacao = $"{raiz}/swagger/v1/swagger.json",
+        cabecalhos = new
+        {
+            xTenantId = "obrigatório na maioria das rotas — identifica a corretora",
+            xActorId = "define quais comissões a política RESTRICTIVE torna visíveis",
+            idempotencyKey = "emissão de apólice: reenviar a mesma chave devolve a resposta original"
+        },
+        // Começar por /api/brokerages é deliberado: é a única rota que dispensa
+        // X-Tenant-Id, e o id devolvido por ela alimenta todas as demais.
+        comecarPor = $"{raiz}/api/brokerages",
+        rotas = new
+        {
+            corretoras = "GET /api/brokerages",
+            corretores = "GET /api/brokers",
+            painel = "GET /api/dashboard",
+            clientes = "GET|POST /api/customers · GET|PUT|DELETE /api/customers/{id} · POST /api/customers/{id}/restore",
+            bens = "GET /api/customers/{id}/assets",
+            produtos = "GET /api/products",
+            cotacoes = "GET|POST /api/quotations · GET /api/quotations/{id} · POST /api/quotations/{id}/convert",
+            propostas = "GET /api/proposals · GET /api/proposals/{id} · POST /api/proposals/{id}/underwrite · POST /api/proposals/{id}/issue",
+            apolices = "GET /api/policies",
+            faturamento = "GET /api/billing/summary · GET /api/billing/installments · POST /api/billing/installments/{id}/pay",
+            comissoes = "GET /api/commissions · GET /api/commissions/monthly · POST /api/commissions/{id}/release · POST /api/commissions/{id}/reverse",
+            sinistros = "GET /api/claims · GET /api/claims/{id} · POST /api/claims · POST /api/claims/{id}/events · POST /api/claims/{id}/decide",
+            engenharia = "GET /api/engineering/schema · /rls · /invariants",
+            eventos = "GET /api/events/stream (SSE) · GET /api/events/recent"
+        }
+    });
+}).WithTags("Índice").WithSummary("Mapa das rotas disponíveis");
+
 // ---------------------------------------------------------------- módulos
 // Cada área vive no próprio arquivo de endpoints; aqui só o registro.
 app.MapCustomerEndpoints();    // consulta, cadastro, edição, exclusão lógica, restauração
