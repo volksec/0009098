@@ -1057,15 +1057,6 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
 
 ## 18. Estado do projeto
 
-| Fase | Escopo | Status |
-|---|---|---|
-| 1 | Requisitos, modelagem, agregados, Value Objects, ADRs | ✅ Concluída |
-| 2 | Solução .NET, SharedKernel, 19 VOs, CI | ✅ Concluída |
-| 3 | 11 migrations, RLS, particionamento, rollback | ✅ Verificada contra PostgreSQL real |
-| 4 | Domínio, persistência, API, CRUD, SSE, frontend | ✅ Funcional |
-| 5 | Billing, Commissions, Claims, workers | ✅ Funcional |
-| 6 | Cotação e proposta pela interface | ✅ Funcional |
-
 **O que está operacional hoje**
 
 - Banco com 71 tabelas, 224 índices, 62 políticas de RLS e 80 partições
