@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <path d="M8 0h24v24l-8 8H0V8z" fill="#0B2447"/>
+  <text x="16" y="21" font-family="Inter,sans-serif" font-size="13" font-weight="700"
+        fill="#fff" text-anchor="middle">PC</text>
+</svg>
