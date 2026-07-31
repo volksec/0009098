@@ -10,7 +10,7 @@ Banco de dados objeto-relacional · Modelo de domínio rico · Arquitetura modul
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791)](https://www.postgresql.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)](https://docs.docker.com/compose/)
-[![Testes](https://img.shields.io/badge/testes-181%20passando-1F9D63)](#9-testes)
+[![Testes](https://img.shields.io/badge/testes-187%20passando-1F9D63)](#9-testes)
 [![Licença](https://img.shields.io/badge/licença-MIT-1F6FEB)](LICENSE)
 
 </div>
@@ -48,7 +48,7 @@ PostgreSQL usado como banco objeto-relacional de verdade.
 | **Assincronismo** | Outbox transacional — evento e estado confirmados na mesma transação |
 | **Auditoria** | Trilha append-only imposta por `REVOKE` no banco, particionada por mês |
 | **Observabilidade** | OpenTelemetry ponta a ponta, correlation ID propagado até o banco, métricas de negócio, performance e integridade |
-| **Qualidade** | 181 testes (unitários, propriedade, arquiteturais), `TreatWarningsAsErrors`, fronteiras de módulo verificadas por NetArchTest |
+| **Qualidade** | 187 testes (unitários, propriedade, arquiteturais), `TreatWarningsAsErrors`, fronteiras de módulo verificadas por NetArchTest |
 
 ### Perfis de acesso
 
@@ -856,7 +856,7 @@ Desenvolvimento incremental em 10 fases.
 | **9** | Módulo regulatório e agentes de IA | ⏳ |
 | **10** | DevSecOps, GitHub Pages, jornada guiada | ⏳ |
 
-**Verificado:** 181 testes passando (89 Value Objects + 78 agregados e invariantes + 14 arquiteturais), build Release sem avisos.
+**Verificado:** 187 testes passando (89 Value Objects + 84 agregados, invariantes e contexto de tenant + 14 arquiteturais), build Release sem avisos.
 
 > **Fase 3** — as 9 migrations (2.233 linhas de SQL) estão escritas e revisadas, mas ainda não
 > foram executadas contra um PostgreSQL real. Volume de SQL não executado normalmente contém erros

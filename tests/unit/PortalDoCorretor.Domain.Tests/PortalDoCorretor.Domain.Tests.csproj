@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\..\modules\customers\PortalDoCorretor.Customers.Domain\PortalDoCorretor.Customers.Domain.csproj" />
     <ProjectReference Include="..\..\..\modules\proposals\PortalDoCorretor.Proposals.Domain\PortalDoCorretor.Proposals.Domain.csproj" />
     <ProjectReference Include="..\..\..\modules\policies\PortalDoCorretor.Policies.Domain\PortalDoCorretor.Policies.Domain.csproj" />
+    <ProjectReference Include="..\..\..\shared\PortalDoCorretor.Persistence\PortalDoCorretor.Persistence.csproj" />
   </ItemGroup>
 
 </Project>

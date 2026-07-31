@@ -23,6 +23,17 @@ public abstract class Entity<TId> : IEquatable<Entity<TId>>
 /// <summary>Marcador de raiz de agregado — usado pelos testes arquiteturais e pelos repositórios.</summary>
 public interface IAggregateRoot;
 
+/// <summary>
+/// Permite que a infraestrutura drene os eventos acumulados sem conhecer o tipo concreto
+/// do agregado. Fica no SharedKernel, e não na camada de persistência, para que a regra de
+/// dependência continue apontando para dentro.
+/// </summary>
+public interface IHasDomainEvents
+{
+    IReadOnlyCollection<IDomainEvent> DomainEvents { get; }
+    void ClearDomainEvents();
+}
+
 /// <summary>Entidade pertencente a um tenant. Base do filtro global e da RLS.</summary>
 public interface ITenantScoped
 {
@@ -74,7 +85,7 @@ public abstract record DomainEvent(TenantId TenantId) : IDomainEvent
 /// Acumula eventos em memória; o interceptor do ORM os drena antes do commit e grava
 /// as mensagens de Outbox na MESMA transação, eliminando o problema de dual write.
 /// </summary>
-public abstract class AggregateRoot<TId> : Entity<TId>, IAggregateRoot
+public abstract class AggregateRoot<TId> : Entity<TId>, IAggregateRoot, IHasDomainEvents
     where TId : struct, IEquatable<TId>
 {
     private readonly List<IDomainEvent> _domainEvents = [];
