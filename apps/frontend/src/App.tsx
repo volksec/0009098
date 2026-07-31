@@ -7,14 +7,18 @@ import {
 import { CustomerAdmin } from './CustomerAdmin'
 import { BillingPage, ClaimsPage, CommissionsPage } from './Operations'
 import { LiveConsole } from './LiveConsole'
+import { ProposalsPage, QuotationsPage } from './Underwriting'
 
 type Page =
-  | 'dashboard' | 'admin' | 'policies' | 'billing' | 'commissions' | 'claims'
+  | 'dashboard' | 'admin' | 'quotations' | 'proposals' | 'policies'
+  | 'billing' | 'commissions' | 'claims'
   | 'console' | 'engineering' | 'isolation'
 
 const PAGES: { id: Page; label: string; group: string }[] = [
   { id: 'dashboard', label: 'Painel', group: 'Operação' },
   { id: 'admin', label: 'Clientes', group: 'Operação' },
+  { id: 'quotations', label: 'Cotações', group: 'Operação' },
+  { id: 'proposals', label: 'Propostas', group: 'Operação' },
   { id: 'policies', label: 'Apólices', group: 'Operação' },
   { id: 'billing', label: 'Faturamento', group: 'Operação' },
   { id: 'commissions', label: 'Comissões', group: 'Operação' },
@@ -366,6 +370,14 @@ export default function App() {
       title: 'Administração de clientes',
       subtitle: 'Cadastro, edição e exclusão lógica persistidos diretamente no PostgreSQL',
     },
+    quotations: {
+      title: 'Cotações',
+      subtitle: 'Assistente de cotação e comparação dos três planos calculados',
+    },
+    proposals: {
+      title: 'Propostas',
+      subtitle: 'Análise de risco versionada e emissão de apólice',
+    },
     policies: { title: 'Apólices', subtitle: 'Contratos emitidos e suas vigências' },
     billing: {
       title: 'Faturamento',
@@ -447,6 +459,8 @@ export default function App() {
         {tenantId && page === 'commissions' && <CommissionsPage key={tenantId} tenantId={tenantId} />}
         {tenantId && page === 'claims' && <ClaimsPage key={tenantId} tenantId={tenantId} />}
         {page === 'console' && <LiveConsole />}
+        {tenantId && page === 'quotations' && <QuotationsPage key={tenantId} tenantId={tenantId} />}
+        {tenantId && page === 'proposals' && <ProposalsPage key={tenantId} tenantId={tenantId} />}
         {tenantId && page === 'policies' && <PoliciesPage tenantId={tenantId} />}
         {page === 'engineering' && <EngineeringPage />}
         {tenantId && page === 'isolation' && (

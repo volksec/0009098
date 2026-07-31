@@ -280,3 +280,90 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   font-size: 10px; text-transform: uppercase; letter-spacing: .7px;
   color: #6b84a8; padding: 10px 12px 4px; font-weight: 600;
 }
+
+/* ---------------------------------------------------------------- cotação e proposta */
+
+.modal.wide { width: min(880px, 100%); }
+.modal-head .sub { font-size: 12px; color: var(--pdc-slate-500); margin-top: 2px; }
+.btn.small { padding: 5px 11px; font-size: 12.5px; }
+
+/* Passos do assistente: o número vira ✓ quando o passo é concluído */
+.stepper {
+  display: flex; gap: 4px; padding: 12px 20px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--pdc-slate-200); background: #fcfdfe;
+}
+.step {
+  display: flex; align-items: center; gap: 7px; font-size: 12.5px;
+  color: var(--pdc-slate-500); padding: 4px 12px 4px 4px;
+}
+.step-num {
+  display: grid; place-items: center; width: 21px; height: 21px; border-radius: 50%;
+  background: var(--pdc-slate-200); color: var(--pdc-slate-700);
+  font-size: 11.5px; font-weight: 640;
+}
+.step.current { color: var(--pdc-navy-900); font-weight: 600; }
+.step.current .step-num { background: var(--pdc-blue-600); color: #fff; }
+.step.done .step-num { background: var(--pdc-green-600); color: #fff; }
+
+/* Listas de escolha (cliente, bem, produto) */
+.pick-list { display: flex; flex-direction: column; gap: 7px; }
+.pick {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  text-align: left; width: 100%; padding: 11px 14px; cursor: pointer;
+  background: #fff; border: 1px solid var(--pdc-slate-200); border-radius: 9px;
+  font: inherit; color: inherit; transition: border-color .12s, background .12s;
+}
+.pick:hover { border-color: var(--pdc-blue-600); background: #fbfcff; }
+.pick.selected { border-color: var(--pdc-blue-600); background: var(--pdc-blue-100); }
+.pick strong { font-size: 13.5px; }
+
+/* Coberturas: obrigatórias ficam travadas com cursor de "não permitido" */
+.coverage-list { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
+.coverage {
+  display: flex; align-items: flex-start; gap: 11px; padding: 11px 14px;
+  border: 1px solid var(--pdc-slate-200); border-radius: 9px; cursor: pointer;
+  background: #fff;
+}
+.coverage input { margin-top: 3px; width: 15px; height: 15px; accent-color: var(--pdc-blue-600); }
+.coverage.on { border-color: var(--pdc-blue-600); background: #fbfcff; }
+.coverage.locked { cursor: not-allowed; background: var(--pdc-slate-50); }
+.coverage strong { font-size: 13.5px; }
+
+/* Comparação dos três planos */
+.plan-grid {
+  display: grid; gap: 12px; margin-top: 13px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.plan {
+  position: relative; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  background: #fff; border: 1.5px solid var(--pdc-slate-200); border-radius: 12px;
+  padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 6px;
+  transition: border-color .12s, box-shadow .12s;
+}
+.plan:hover:not(:disabled) { border-color: var(--pdc-blue-600); }
+.plan:disabled { cursor: default; opacity: .78; }
+.plan.selected { border-color: var(--pdc-blue-600); box-shadow: 0 0 0 3px var(--pdc-blue-100); }
+.plan.featured { border-color: var(--pdc-navy-800); }
+.plan-tag {
+  position: absolute; top: -9px; right: 14px; font-size: 10.5px; letter-spacing: .04em;
+  text-transform: uppercase; background: var(--pdc-navy-900); color: #fff;
+  padding: 3px 9px; border-radius: 20px; font-weight: 620;
+}
+.plan-name {
+  font-size: 12px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--pdc-slate-500); font-weight: 620;
+}
+.plan-price { font-size: 27px; font-weight: 660; color: var(--pdc-navy-900); }
+.plan-net { font-size: 11.5px; color: var(--pdc-slate-500); }
+.plan-covers {
+  list-style: none; margin: 10px 0 0; padding: 10px 0 0; display: flex;
+  flex-direction: column; gap: 5px; border-top: 1px solid var(--pdc-slate-200);
+}
+.plan-covers li {
+  display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px;
+  color: var(--pdc-slate-700);
+}
+.plan-foot {
+  margin-top: auto; padding-top: 10px; font-size: 11px; color: var(--pdc-slate-500);
+  font-variant-numeric: tabular-nums;
+}

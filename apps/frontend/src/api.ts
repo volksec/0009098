@@ -172,10 +172,11 @@ interface RequestOptions {
   actorId?: string
   method?: string
   body?: unknown
+  idempotencyKey?: string
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { tenantId, actorId, method = "GET", body } = options
+  const { tenantId, actorId, method = "GET", body, idempotencyKey } = options
   const started = performance.now()
 
   const headers: Record<string, string> = { Accept: 'application/json' }
@@ -185,6 +186,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   // O ator determina quais comissoes a politica RESTRICTIVE torna visiveis
   if (actorId) headers['X-Actor-Id'] = actorId
   if (body !== undefined) headers['Content-Type'] = 'application/json'
+  // Reenviar a mesma chave devolve a resposta original em vez de repetir o efeito
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey
 
   const response = await fetch(`${BASE_URL}${path}`, {
     method,
@@ -226,13 +229,14 @@ export const api = {
   dashboard: (tenantId: string) => request<DashboardSummary>('/api/dashboard', { tenantId }),
 
   customers: (tenantId: string, params: {
-    search?: string; kind?: string; status?: string
+    search?: string; kind?: string; status?: string; brokerId?: string
     includeDeleted?: boolean; page?: number; pageSize?: number
   } = {}) => {
     const query = new URLSearchParams()
     if (params.search) query.set('search', params.search)
     if (params.kind) query.set('kind', params.kind)
     if (params.status) query.set('status', params.status)
+    if (params.brokerId) query.set('brokerId', params.brokerId)
     if (params.includeDeleted) query.set('includeDeleted', 'true')
     query.set('page', String(params.page ?? 1))
     query.set('pageSize', String(params.pageSize ?? 20))
@@ -467,4 +471,194 @@ export const claimApi = {
   }) => request<{ status: string }>(`/api/claims/${id}/decide`, {
     tenantId, method: 'POST', body: input,
   }),
+}
+
+// ---------------------------------------------------------------- cotação e proposta
+
+export interface ProductVersion {
+  id: string
+  productId: string
+  name: string
+  branch: 'AUTO' | 'RESIDENTIAL' | 'LIFE' | 'TRAVEL'
+  version: number
+  baseRate: number
+  riskSensitivity: number
+  maxAcceptableRisk: number
+  minInsuredValue: number
+  maxInsuredValue: number
+}
+
+export interface CoverageOption {
+  id: string
+  productVersionId: string
+  code: string
+  name: string
+  description: string | null
+  isMandatory: boolean
+  minLimit: number
+  maxLimit: number
+  deductibleKind: string
+  deductibleAmount: number | null
+  deductiblePercent: number | null
+}
+
+export interface InsurableAsset {
+  id: string
+  kind: string
+  declaredValue: number
+  label: string
+  vehiclePostalCode: string | null
+  propertyPostalCode: string | null
+}
+
+export interface QuotationSummary {
+  id: string
+  number: string
+  status: string
+  riskScore: number
+  riskBand: string
+  createdAt: string
+  expiresAt: string
+  rejectionReasons: string[] | null
+  productName: string
+  customerName: string
+  fromPremium: number | null
+  isExpired: boolean
+  hasProposal: boolean
+}
+
+export interface QuotationPlan {
+  id: string
+  plan: string
+  netPremium: number
+  totalPremium: number
+  riskMultiplier: number
+  planMultiplier: number
+  engineVersion: string
+  factors: Record<string, number>
+}
+
+export interface QuotationCoverage {
+  planId: string
+  code: string
+  name: string
+  isMandatory: boolean
+  limit: number
+  premium: number
+  deductibleKind: string
+  deductibleAmount: number | null
+  deductiblePercent: number | null
+}
+
+export interface QuotationDetail {
+  quotation: QuotationSummary & { insuredValue: number }
+  plans: QuotationPlan[]
+  coverages: QuotationCoverage[]
+  risk: { answers: Record<string, unknown>; schemaVersion: number; computedScore: number } | null
+}
+
+export interface ProposalSummary {
+  id: string
+  number: string
+  status: string
+  chosenPlan: string
+  totalPremium: number
+  installmentCount: number
+  createdAt: string
+  submittedAt: string | null
+  decidedAt: string | null
+  issuedAt: string | null
+  quotationNumber: string
+  customerName: string
+  openPendencies: number
+  policyNumber: string | null
+  lastDecision: string | null
+}
+
+export interface UnderwritingDecision {
+  version: number
+  outcome: string
+  reasons: string[]
+  decidedAt: string
+}
+
+export interface ProposalDetail {
+  proposal: ProposalSummary & {
+    netPremium: number
+    quotationId: string
+    riskScore: number
+    riskBand: string
+    productName: string
+    policyId: string | null
+  }
+  decisions: UnderwritingDecision[]
+  pendencies: { id: string; code: string; description: string; openedAt: string; resolvedAt: string | null }[]
+  history: { fromStatus: string | null; toStatus: string; reason: string | null; changedAt: string }[]
+}
+
+export interface QuotationInput {
+  customerId: string
+  assetId: string
+  productVersionId: string
+  coverageIds: string[]
+  hasGarage: boolean
+  usage: string
+  driverAge: number
+  previousClaims: boolean
+}
+
+export const quotationApi = {
+  catalog: (tenantId: string) =>
+    request<{ products: ProductVersion[]; coverages: CoverageOption[] }>(
+      '/api/products', { tenantId }),
+
+  assets: (tenantId: string, customerId: string) =>
+    request<InsurableAsset[]>(`/api/customers/${customerId}/assets`, { tenantId }),
+
+  list: (tenantId: string, params: { status?: string; page?: number } = {}) => {
+    const query = new URLSearchParams()
+    if (params.status) query.set('status', params.status)
+    query.set('page', String(params.page ?? 1))
+    query.set('pageSize', '15')
+    return request<PagedResult<QuotationSummary>>(`/api/quotations?${query}`, { tenantId })
+  },
+
+  detail: (tenantId: string, id: string) =>
+    request<QuotationDetail>(`/api/quotations/${id}`, { tenantId }),
+
+  create: (tenantId: string, actorId: string, input: QuotationInput) =>
+    request<{ id: string; number: string; riskScore: number; riskBand: string }>(
+      '/api/quotations', { tenantId, actorId, method: 'POST', body: input }),
+
+  convert: (tenantId: string, actorId: string, id: string, plan: string, installmentCount: number) =>
+    request<{ id: string; number: string }>(`/api/quotations/${id}/convert`, {
+      tenantId, actorId, method: 'POST', body: { plan, installmentCount },
+    }),
+}
+
+export const proposalApi = {
+  list: (tenantId: string, params: { status?: string; page?: number } = {}) => {
+    const query = new URLSearchParams()
+    if (params.status) query.set('status', params.status)
+    query.set('page', String(params.page ?? 1))
+    query.set('pageSize', '15')
+    return request<PagedResult<ProposalSummary>>(`/api/proposals?${query}`, { tenantId })
+  },
+
+  detail: (tenantId: string, id: string) =>
+    request<ProposalDetail>(`/api/proposals/${id}`, { tenantId }),
+
+  underwrite: (tenantId: string, actorId: string, id: string, outcome: string, reason: string) =>
+    request<{ version: number; status: string }>(`/api/proposals/${id}/underwrite`, {
+      tenantId, actorId, method: 'POST', body: { outcome, reason },
+    }),
+
+  /**
+   * A chave de idempotência é gerada uma vez por tentativa e reenviada nos retries:
+   * é o que permite ao usuário clicar duas vezes sem emitir duas apólices.
+   */
+  issue: (tenantId: string, actorId: string, id: string, idempotencyKey: string) =>
+    request<{ policyId: string; number: string; periodStart: string; periodEnd: string; totalPremium: number; installments: number }>(
+      `/api/proposals/${id}/issue`,
+      { tenantId, actorId, method: 'POST', body: {}, idempotencyKey }),
 }
