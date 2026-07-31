@@ -513,7 +513,7 @@ regra vigente e a mensagem de outbox — ou nada disso.
 │
 ├── database/
 │   ├── secure/
-│   │   ├── migrations/           10 migrations versionadas
+│   │   ├── migrations/           11 migrations versionadas
 │   │   ├── rollback/             Script de reversão por migration
 │   │   ├── scripts/              Init de papéis, extensões, contexto de tenant
 │       └── seeds/                Massa determinística
@@ -1061,7 +1061,7 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
 |---|---|---|
 | 1 | Requisitos, modelagem, agregados, Value Objects, ADRs | ✅ Concluída |
 | 2 | Solução .NET, SharedKernel, 19 VOs, CI | ✅ Concluída |
-| 3 | 10 migrations, RLS, particionamento, rollback | ✅ Verificada contra PostgreSQL real |
+| 3 | 11 migrations, RLS, particionamento, rollback | ✅ Verificada contra PostgreSQL real |
 | 4 | Domínio, persistência, API, CRUD, SSE, frontend | ✅ Funcional |
 | 5 | Billing, Commissions, Claims, workers | ✅ Funcional |
 | 6 | Cotação e proposta pela interface | ✅ Funcional |
