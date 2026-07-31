@@ -84,7 +84,7 @@ interface e no Live Processing Console.
 | **Assincronismo** | Outbox transacional — evento e estado confirmados na mesma transação |
 | **Auditoria** | Trilha append-only imposta por `REVOKE` no banco, particionada por mês |
 | **Tempo real** | Live Processing Console via Server-Sent Events, com redação automática de dados sensíveis |
-| **Qualidade** | 201 testes (unitários, propriedade, arquiteturais e integração com PostgreSQL real via Testcontainers) |
+| **Qualidade** | 224 testes (unitários, propriedade, arquiteturais e integração com PostgreSQL real via Testcontainers) |
 
 ### Perfis de acesso
 
@@ -199,7 +199,9 @@ Resposta esperada: `{"status":"ready","tables":71}`
 | Recurso | URL | Descrição |
 |---|---|---|
 | **Portal** | http://localhost:5173 | Interface principal |
-| **Administração** | http://localhost:5173 → *Administração* | CRUD de clientes |
+| **Administração** | http://localhost:5173 → *Clientes* | CRUD de clientes |
+| **Cotação** | http://localhost:5173 → *Cotações* | Assistente e comparação dos três planos |
+| **Propostas** | http://localhost:5173 → *Propostas* | Análise de risco e emissão de apólice |
 | **Live Console** | http://localhost:5173 → *Live Console* | Eventos em tempo real |
 | **Banco de dados** | http://localhost:5173 → *Banco de dados* | Catálogo, RLS e invariantes |
 | **Isolamento** | http://localhost:5173 → *Isolamento* | Demonstração de multi-tenancy |
@@ -223,6 +225,16 @@ Resposta esperada: `{"status":"ready","tables":71}`
 | `PUT` | `/api/customers/{id}` | **Editar** cliente |
 | `DELETE` | `/api/customers/{id}` | **Excluir logicamente** (motivo obrigatório) |
 | `POST` | `/api/customers/{id}/restore` | **Restaurar** cliente excluído |
+| `GET` | `/api/products` | Catálogo de produtos e coberturas |
+| `GET` | `/api/customers/{id}/assets` | Bens seguráveis do cliente |
+| `GET` | `/api/quotations` | Cotações — paginação e filtro por status |
+| `GET` | `/api/quotations/{id}` | Cotação com os três planos e o snapshot de cálculo |
+| `POST` | `/api/quotations` | **Cotar** — calcula os três planos |
+| `POST` | `/api/quotations/{id}/convert` | **Converter** cotação em proposta |
+| `GET` | `/api/proposals` | Propostas — paginação e filtro por status |
+| `GET` | `/api/proposals/{id}` | Proposta com decisões, pendências e histórico |
+| `POST` | `/api/proposals/{id}/underwrite` | **Decidir** análise de risco (versionada) |
+| `POST` | `/api/proposals/{id}/issue` | **Emitir** apólice (aceita `Idempotency-Key`) |
 | `GET` | `/api/policies` | Apólices |
 | `GET` | `/api/billing/summary` | Resumo de parcelas: pendentes, vencidas, quitadas |
 | `GET` | `/api/billing/installments` | Parcelas — paginação e filtro por status |
@@ -243,7 +255,7 @@ Resposta esperada: `{"status":"ready","tables":71}`
 | `GET` | `/api/engineering/invariants` | Constraints do modelo |
 
 **Parâmetros de `GET /api/customers`:** `search`, `kind` (`INDIVIDUAL`/`BUSINESS`), `status`,
-`includeDeleted`, `page`, `pageSize` (1–100).
+`brokerId`, `includeDeleted`, `page`, `pageSize` (1–100).
 
 ### Cabeçalhos
 
@@ -252,6 +264,7 @@ Resposta esperada: `{"status":"ready","tables":71}`
 | `X-Tenant-Id` | Corretora corrente. **Provisório** — passa a vir do claim do token com a autenticação |
 | `X-Actor-Id` | Ator da operação (`created_by`, `deleted_by`, auditoria) |
 | `X-Correlation-Id` | Correlação; gerado se ausente e devolvido em toda resposta |
+| `Idempotency-Key` | Emissão de apólice: reenviar a mesma chave devolve a resposta original |
 
 ---
 
@@ -420,6 +433,55 @@ COMMIT ⇒ some da listagem padrão (query filter), volta com includeDeleted=tru
 
 > `DELETE` físico é **revogado** do papel da aplicação no banco. Nem um bug consegue destruir
 > histórico.
+
+### Cotação → proposta → apólice
+
+O caminho comercial completo, todo pela interface. O assistente de cotação percorre quatro
+passos — cliente, bem e produto, coberturas, questionário de risco — e devolve os três planos
+calculados lado a lado.
+
+```
+POST /api/quotations
+   │
+   ▼
+PremiumCalculator ── domínio puro: sem I/O, sem relógio, sem aleatoriedade
+   ├── escore de risco derivado do questionário (curva em U por idade, uso, garagem, sinistros)
+   ├── recusa se faltar cobertura obrigatória  ⇒ MANDATORY_COVERAGE_MISSING
+   ├── recusa se o valor do bem sair da faixa  ⇒ ASSET_VALUE_OUT_OF_RANGE
+   └── recusa se o risco exceder o apetite     ⇒ RISK_NOT_ACCEPTABLE (persistida como REJECTED)
+   │
+   ▼
+3 planos × N coberturas, cada plano com CalculationSnapshot dos fatores de entrada
+   │
+   ▼
+POST /api/quotations/{id}/convert   { plano, parcelamento }
+   ├── UPDATE quotations → CONVERTED  +  INSERT proposals   (mesma transação)
+   └── ux_proposals_quotation_active ⇒ uma proposta viva por cotação
+   │
+   ▼
+POST /api/proposals/{id}/underwrite   { resultado, motivo }
+   └── decisão VERSIONADA e imutável — v2 não apaga v1
+   │
+   ▼
+POST /api/proposals/{id}/issue        Idempotency-Key: <uuid>
+```
+
+**A emissão é o caso de uso central**, e a duplicidade é barrada em três camadas
+independentes — cada uma sobrevive à falha da anterior:
+
+| Camada | Mecanismo | O que ela pega |
+|---|---|---|
+| 1 | `Idempotency-Key` persistida | Retentativa do cliente, rede instável, duplo clique |
+| 2 | Lock otimista via `xmin` | Duas requisições concorrentes que já passaram da camada 1 |
+| 3 | `ux_policies_proposal` + `ex_policies_no_overlap` | Qualquer escrita, inclusive fora da API |
+
+Uma única transação grava apólice, coberturas **congeladas** no momento da emissão, plano de
+parcelamento (com o resto de centavos distribuído pelo método do maior resto), comissão pela
+regra vigente e a mensagem de outbox — ou nada disso.
+
+> A emissão só é liberada para o **corretor responsável pela proposta**. Tentar emitir como
+> outro corretor devolve `403 NOT_PROPOSAL_OWNER`; removida essa checagem, a política
+> `RESTRICTIVE` de `commissions` ainda recusaria a gravação no banco.
 
 ---
 
@@ -1036,7 +1098,7 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
 | 3 | 9 migrations, RLS, particionamento, rollback | ✅ Verificada contra PostgreSQL real |
 | 4 | Domínio, persistência, API, CRUD, SSE, frontend | ✅ Funcional |
 | 5 | Billing, Commissions, Claims, workers | ✅ Funcional |
-| 6 | Cotação e proposta pela interface | ⏳ |
+| 6 | Cotação e proposta pela interface | ✅ Funcional |
 | 7 | Query Inspector, Transaction Inspector, Data Browser | ⏳ |
 
 **O que está operacional hoje**
@@ -1047,16 +1109,19 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
 - Comissões: extrato por corretor, consolidação mensal, liberação e estorno inverso
 - Sinistros: aviso com validação de vigência, linha do tempo append-only, decisão simulada
 - Cinco workers, incluindo Outbox com `SKIP LOCKED` e verificação diária de integridade
+- Cotação pela interface: assistente de quatro passos, cálculo determinístico e comparação
+  dos três planos com o snapshot dos fatores
+- Proposta e emissão: análise de risco versionada e apólice emitida em transação única, com
+  as três camadas anti-duplicidade
 - Live Processing Console via SSE, Database Explorer e demonstração de isolamento
-- 201 testes, dos quais 14 de integração contra PostgreSQL real
+- 224 testes, dos quais 14 de integração contra PostgreSQL real
 
 **O que ainda não existe**
 
 - **Autenticação.** O tenant e o ator viajam por cabeçalho, marcado como provisório no código.
   É a lacuna mais visível: enquanto não existir, a auditoria registra conta técnica em vez do
   usuário real.
-- Escrita de cotação, proposta e emissão de apólice pela interface (o banco modela tudo, e a
-  emissão concorrente já está testada)
+- Renovação e endosso pela interface (o modelo já contempla ambos)
 - Query Inspector com `EXPLAIN`, Transaction Inspector e Data Browser
 
 ---
