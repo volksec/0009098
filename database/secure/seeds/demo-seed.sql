@@ -359,7 +359,16 @@ BEGIN
                         IF (c % 4) <> 1 THEN
                             v_policy := gen_random_uuid();
                             v_plan := gen_random_uuid();
-                            v_start := DATE '2026-01-01' + ((c * 11) % 300);
+                            -- Vigência ancorada no dia da carga, não em data fixa: com
+                            -- DATE '2026-01-01' todas as apólices terminavam a mais de seis
+                            -- meses de distância, então nenhuma entrava na janela de 45 dias
+                            -- do Renewal Scanner — o worker rodava sem nunca ter o que fazer
+                            -- e o painel mostrava "Renovações 0" para sempre.
+                            -- O deslocamento vai de 0 a 359 dias, então toda apólice continua
+                            -- vigente hoje e as mais antigas vencem dentro da janela.
+                            -- v_seq entra na conta porque c vai no maximo a 15: sozinho
+                            -- ele nunca alcancaria os deslocamentos grandes
+                            v_start := CURRENT_DATE - ((((v_seq * 47) + (c * 23)) % 360)::int);
 
                             INSERT INTO policies (id, tenant_id, proposal_id, broker_id, customer_id,
                                    asset_id, product_version_id, number, status, coverage_period,
