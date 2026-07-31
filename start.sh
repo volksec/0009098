@@ -48,16 +48,59 @@ if ! command -v docker >/dev/null 2>&1; then
   done
 fi
 
-# ---------------------------------------------------------------- parar
-if [ "$STOP" = "1" ]; then
-  step "Encerrando serviços"
+# Encerra API, workers e frontend de uma execução anterior.
+#
+# Precisa rodar ANTES do build: no Windows o .NET não sobrescreve um .exe em uso,
+# então rodar o script duas vezes seguidas falhava na compilação.
+#
+# Não dá para confiar apenas no .pid: sob Git Bash, `cmd &` registra o PID do job do
+# bash, não o do processo do Windows. `dotnet run` e `npm` ainda criam um filho, então
+# o processo que realmente segura a porta é neto do pid registrado — e `kill` no pid
+# registrado o deixava vivo. Por isso o encerramento é feito pelo nome da imagem
+# (as duas são exclusivas deste projeto) e, para o frontend, por quem ocupa a porta.
+stop_app_processes() {
+  local mode="${1:-quiet}" stopped=0
+
+  if command -v taskkill >/dev/null 2>&1; then
+    for image in PortalDoCorretor.SecureApi.exe PortalDoCorretor.Workers.exe; do
+      if taskkill //F //T //IM "$image" >/dev/null 2>&1; then
+        [ "$mode" = "verbose" ] && ok "${image%.exe} encerrado"
+        stopped=1
+      fi
+    done
+
+    # O Vite roda dentro do node; localiza pela porta em vez do nome
+    if command -v netstat >/dev/null 2>&1; then
+      for winpid in $(netstat -ano 2>/dev/null | grep ":$WEB_PORT .*LISTENING"                       | awk '{print $NF}' | sort -u); do
+        if taskkill //F //T //PID "$winpid" >/dev/null 2>&1; then
+          [ "$mode" = "verbose" ] && ok "frontend (pid $winpid) encerrado"
+          stopped=1
+        fi
+      done
+    fi
+  fi
+
+  # Fallback POSIX, e limpeza dos arquivos de pid
   for name in api workers web; do
     if [ -f "$LOG_DIR/$name.pid" ]; then
-      pid="$(cat "$LOG_DIR/$name.pid")"
-      kill "$pid" 2>/dev/null && ok "$name (pid $pid) encerrado" || warn "$name já estava parado"
+      kill "$(cat "$LOG_DIR/$name.pid")" 2>/dev/null && stopped=1
       rm -f "$LOG_DIR/$name.pid"
     fi
   done
+
+  if [ "$stopped" = "1" ]; then
+    # Dá tempo do sistema liberar os binários antes do próximo build
+    sleep 3
+  else
+    [ "$mode" = "verbose" ] && warn "nenhum serviço estava em execução"
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------- parar
+if [ "$STOP" = "1" ]; then
+  step "Encerrando serviços"
+  stop_app_processes verbose
   docker compose stop >/dev/null 2>&1 && ok "contêineres parados" || true
   echo; exit 0
 fi
@@ -108,6 +151,9 @@ if [ ! -d apps/frontend/node_modules ]; then
 else
   ok "node_modules já presente"
 fi
+
+# Libera os binarios: o .NET nao sobrescreve um .exe em uso
+stop_app_processes
 
 dotnet build --nologo -v q --configuration Release >/dev/null 2>&1 \
   && ok "solução compilada" || die "falha na compilação — rode 'dotnet build' para ver o detalhe"
@@ -170,9 +216,7 @@ step "Iniciando serviços"
 
 for port in "$API_PORT" "$WEB_PORT"; do
   if command -v netstat >/dev/null 2>&1 && netstat -ano 2>/dev/null | grep -q ":$port .*LISTENING"; then
-    warn "porta $port já está em uso — encerrando processo anterior"
-    if [ -f "$LOG_DIR/api.pid" ]; then kill "$(cat "$LOG_DIR/api.pid")" 2>/dev/null || true; fi
-    if [ -f "$LOG_DIR/web.pid" ]; then kill "$(cat "$LOG_DIR/web.pid")" 2>/dev/null || true; fi
+    warn "porta $port ainda ocupada — aguardando liberação"
     sleep 2
   fi
 done
