@@ -1038,9 +1038,6 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
 | 5 | Billing, Commissions, Claims, workers | ✅ Funcional |
 | 6 | Cotação e proposta pela interface | ⏳ |
 | 7 | Query Inspector, Transaction Inspector, Data Browser | ⏳ |
-| 8 | Security Lab e attack simulator | ⏳ |
-| 9 | Módulo regulatório e agentes de IA | ⏳ |
-| 10 | OpenTelemetry, GitHub Pages, Recruiter Mode | ⏳ |
 
 **O que está operacional hoje**
 
