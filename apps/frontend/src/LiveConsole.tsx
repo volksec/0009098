@@ -20,6 +20,22 @@ const STATUS_TONE: Record<string, string> = {
   ERROR: 'danger',
 }
 
+/**
+ * Junta eventos novos aos já exibidos descartando repetidos pelo identificador.
+ *
+ * O mesmo evento chega por dois caminhos: o console busca `/api/events/recent` ao
+ * abrir e o `/api/events/stream` reenvia as últimas 100 ocorrências a cada conexão.
+ * Sem deduplicar, cada evento aparecia duas vezes na lista e o React reclamava de
+ * chave repetida. A reconexão automática do EventSource repetiria o problema a cada
+ * queda de rede, então filtrar na entrada é mais seguro que tratar só a abertura.
+ */
+function mesclar(novos: ProcessingEvent[], atuais: ProcessingEvent[]): ProcessingEvent[] {
+  const vistos = new Set(atuais.map((e) => e.id))
+  const inéditos = novos.filter((e) => !vistos.has(e.id))
+
+  return inéditos.length === 0 ? atuais : [...inéditos, ...atuais].slice(0, MAX_EVENTS)
+}
+
 export function LiveConsole() {
   const [events, setEvents] = useState<ProcessingEvent[]>([])
   const [state, setState] = useState<'connecting' | 'open' | 'closed'>('connecting')
@@ -33,13 +49,15 @@ export function LiveConsole() {
 
   useEffect(() => {
     // Histórico recente primeiro, para que o console não abra vazio
-    api.recentEvents().then((recent) => setEvents(recent.slice().reverse())).catch(() => {})
+    api.recentEvents()
+      .then((recent) => setEvents((current) => mesclar(recent.slice().reverse(), current)))
+      .catch(() => {})
 
     const disconnect = connectEventStream(
       (event) => {
         if (pausedRef.current) return
         // Buffer limitado: um console aberto por horas não pode crescer sem limite
-        setEvents((current) => [event, ...current].slice(0, MAX_EVENTS))
+        setEvents((current) => mesclar([event], current))
       },
       setState,
     )
