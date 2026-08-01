@@ -58,11 +58,11 @@ public static class ClaimEndpoints
     {
         var group = app.MapGroup("/api/claims").WithTags("Sinistros");
 
-        group.MapGet("", ListAsync);
-        group.MapGet("/{id:guid}", DetailAsync);
-        group.MapPost("", ReportAsync);
-        group.MapPost("/{id:guid}/events", AddEventAsync);
-        group.MapPost("/{id:guid}/decide", DecideAsync);
+        group.MapGet("", ListAsync).WithSummary("Sinistros com filtro por situação");
+        group.MapGet("/{id:guid}", DetailAsync).WithSummary("Sinistro com linha do tempo append-only");
+        group.MapPost("", ReportAsync).WithSummary("Avisa sinistro — data validada contra a vigência");
+        group.MapPost("/{id:guid}/events", AddEventAsync).WithSummary("Acrescenta evento à linha do tempo");
+        group.MapPost("/{id:guid}/decide", DecideAsync).WithSummary("Decide o sinistro (simulado)");
     }
 
     private static async Task<IResult> ListAsync(

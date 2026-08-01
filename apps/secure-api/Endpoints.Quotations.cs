@@ -58,13 +58,15 @@ public static class QuotationEndpoints
     {
         var group = app.MapGroup("/api/quotations").WithTags("Cotações");
 
-        group.MapGet("", ListAsync);
-        group.MapGet("/{id:guid}", DetailAsync);
-        group.MapPost("", CreateAsync);
-        group.MapPost("/{id:guid}/convert", ConvertAsync);
+        group.MapGet("", ListAsync).WithSummary("Cotações com filtro por situação");
+        group.MapGet("/{id:guid}", DetailAsync).WithSummary("Cotação com os três planos e o snapshot de cálculo");
+        group.MapPost("", CreateAsync).WithSummary("Calcula os três planos; recusa é persistida com o motivo");
+        group.MapPost("/{id:guid}/convert", ConvertAsync).WithSummary("Converte em proposta na mesma transação");
 
-        app.MapGet("/api/products", ProductsAsync).WithTags("Produtos");
-        app.MapGet("/api/customers/{customerId:guid}/assets", AssetsAsync).WithTags("Clientes");
+        app.MapGet("/api/products", ProductsAsync).WithTags("Produtos")
+           .WithSummary("Catálogo: versões de produto e coberturas disponíveis");
+        app.MapGet("/api/customers/{customerId:guid}/assets", AssetsAsync).WithTags("Clientes")
+           .WithSummary("Bens seguráveis do cliente, com o valor declarado");
     }
 
     // ---------------------------------------------------------------- catálogo

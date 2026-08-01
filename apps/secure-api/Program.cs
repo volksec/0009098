@@ -1,7 +1,10 @@
 using System.Text;
 using Dapper;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using Swashbuckle.AspNetCore.SwaggerGen;
 using PortalDoCorretor.SecureApi;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,11 +31,10 @@ builder.Services.AddSwaggerGen(options =>
         Description = "Cole apenas o token devolvido pelo login."
     });
 
-    options.AddSecurityRequirement(new()
-    {
-        [new() { Reference = new() {
-            Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme, Id = "Bearer" } }] = []
-    });
+    // O requisito de token vai por operação, não global: declarado globalmente, a
+    // especificação afirmaria que /api/auth/login exige o token que o próprio login
+    // emite — e quem lesse o contrato não saberia por onde começar.
+    options.OperationFilter<RequireTokenExceptAnonymous>();
 });
 
 builder.Services.AddHttpContextAccessor();
@@ -122,7 +124,8 @@ app.Use(async (context, next) =>
 // ---------------------------------------------------------------- health
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }))
-   .WithTags("Health").AllowAnonymous();
+   .WithTags("Health").AllowAnonymous()
+   .WithSummary("Liveness: o processo responde");
 
 app.MapGet("/health/ready", async (IDbConnectionFactory factory) =>
 {
@@ -140,7 +143,8 @@ app.MapGet("/health/ready", async (IDbConnectionFactory factory) =>
     {
         return Results.Json(new { status = "unhealthy", reason = ex.GetType().Name }, statusCode: 503);
     }
-}).WithTags("Health").AllowAnonymous();
+}).WithTags("Health").AllowAnonymous()
+  .WithSummary("Readiness: o banco responde e as migrations foram aplicadas");
 
 // ---------------------------------------------------------------- corretoras
 
@@ -151,7 +155,8 @@ app.MapGet("/api/brokerages", async (IDbConnectionFactory factory) =>
         SELECT id, trade_name AS "tradeName", susep_registration AS "susepRegistration", status
           FROM brokerages WHERE deleted_at IS NULL ORDER BY trade_name
         """));
-}).WithTags("Corretoras");   // exige token: a lista de corretoras não é pública
+}).WithTags("Corretoras")   // exige token: a lista de corretoras não é pública
+  .WithSummary("Corretoras cadastradas");
 
 // ---------------------------------------------------------------- índice da API
 // `/api` é prefixo de rota, não rota: sem isto, quem abrisse a URL anunciada pelo
@@ -220,7 +225,7 @@ app.MapGet("/api/brokers", async (RequestContext ctx, IDbConnectionFactory facto
                status::text AS status
           FROM brokers WHERE deleted_at IS NULL ORDER BY full_name
         """));
-}).WithTags("Corretores");
+}).WithTags("Corretores").WithSummary("Corretores da corretora autenticada");
 
 // ---------------------------------------------------------------- apólices
 
@@ -247,7 +252,7 @@ app.MapGet("/api/policies", async (RequestContext ctx, IDbConnectionFactory fact
          ORDER BY p.issued_at DESC
          LIMIT @limit
         """, new { status, limit = Math.Clamp(limit, 1, 100) }));
-}).WithTags("Apólices");
+}).WithTags("Apólices").WithSummary("Apólices com vigência, prêmio e situação");
 
 // ---------------------------------------------------------------- dashboard
 
@@ -269,7 +274,7 @@ app.MapGet("/api/dashboard", async (RequestContext ctx, IDbConnectionFactory fac
                  WHERE status = 'ACTIVE'
                    AND upper(coverage_period) <= CURRENT_DATE + 45)           AS "upcomingRenewals"
         """));
-}).WithTags("Dashboard");
+}).WithTags("Dashboard").WithSummary("Indicadores da carteira do corretor autenticado");
 
 // ---------------------------------------------------------------- engenharia
 // Lido do CATÁLOGO do PostgreSQL em tempo real, não de uma lista fixa no código.
@@ -292,7 +297,7 @@ app.MapGet("/api/engineering/schema", async (IDbConnectionFactory factory) =>
                   AND typrelid IN (SELECT oid FROM pg_class WHERE relkind = 'c')
                   AND typnamespace = 'public'::regnamespace)                  AS "compositeTypes"
         """));
-}).WithTags("Engenharia");
+}).WithTags("Engenharia").WithSummary("Estatísticas lidas do catálogo do PostgreSQL");
 
 app.MapGet("/api/engineering/rls", async (IDbConnectionFactory factory) =>
 {
@@ -310,7 +315,7 @@ app.MapGet("/api/engineering/rls", async (IDbConnectionFactory factory) =>
          WHERE p.schemaname = 'public'
          ORDER BY p.tablename, p.policyname
         """));
-}).WithTags("Engenharia");
+}).WithTags("Engenharia").WithSummary("Políticas de RLS ativas, com a coluna FORCE");
 
 // Invariantes do modelo, lidas das constraints reais do banco.
 app.MapGet("/api/engineering/invariants", async (IDbConnectionFactory factory) =>
@@ -331,7 +336,7 @@ app.MapGet("/api/engineering/invariants", async (IDbConnectionFactory factory) =
          ORDER BY contype DESC, conrelid::regclass::text, conname
          LIMIT 200
         """));
-}).WithTags("Engenharia");
+}).WithTags("Engenharia").WithSummary("Constraints do modelo, incluindo as de exclusão");
 
 // ---------------------------------------------------------------- Live Processing Console
 // Stream de eventos em tempo real via Server-Sent Events.
@@ -404,10 +409,55 @@ app.MapGet("/api/events/stream", async (HttpContext context, ActivityStream stre
     }
 }).WithTags("Observabilidade")
   .WithSummary("Stream SSE do Live Processing Console")
-  .ExcludeFromDescription();
+  .WithDescription(
+      "Conexão longa em text/event-stream: a resposta não termina, por projeto. "
+      + "O \"Try it out\" do Swagger fica carregando indefinidamente — use EventSource "
+      + "no navegador ou `curl -N`. O EventSource não envia cabeçalhos, então aqui o "
+      + "token vai em ?access_token=, e esta é a única rota que o aceita assim.");
 
 // Snapshot dos eventos recentes — fallback por polling quando SSE não estiver disponível.
 app.MapGet("/api/events/recent", (ActivityStream stream) => Results.Ok(stream.Recent()))
-   .WithTags("Observabilidade");
+   .WithTags("Observabilidade")
+   .WithSummary("Últimos eventos — alternativa por polling ao SSE");
 
 app.Run();
+
+/// <summary>
+/// Marca como protegida toda operação que não declarou <c>AllowAnonymous</c>.
+/// </summary>
+/// <remarks>
+/// Espelha no contrato a mesma regra que vale em execução: a política padrão exige
+/// autenticação e a exceção é declarada. Uma especificação que diz o contrário do que a
+/// API faz é pior que especificação nenhuma — manda o integrador para o caminho errado
+/// com a autoridade de um documento.
+/// </remarks>
+internal sealed class RequireTokenExceptAnonymous : IOperationFilter
+{
+    public void Apply(OpenApiOperation operation, OperationFilterContext context)
+    {
+        var anonima = context.ApiDescription.ActionDescriptor.EndpointMetadata
+            .OfType<IAllowAnonymous>().Any();
+
+        if (anonima) return;
+
+        operation.Security =
+        [
+            new OpenApiSecurityRequirement
+            {
+                [new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.SecurityScheme,
+                        Id = "Bearer"
+                    }
+                }] = []
+            }
+        ];
+
+        operation.Responses.TryAdd("401", new OpenApiResponse
+        {
+            Description = "Token ausente, expirado ou inválido."
+        });
+    }
+}

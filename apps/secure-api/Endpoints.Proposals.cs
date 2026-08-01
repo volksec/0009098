@@ -36,10 +36,10 @@ public static class ProposalEndpoints
     {
         var group = app.MapGroup("/api/proposals").WithTags("Propostas");
 
-        group.MapGet("", ListAsync);
-        group.MapGet("/{id:guid}", DetailAsync);
-        group.MapPost("/{id:guid}/underwrite", UnderwriteAsync);
-        group.MapPost("/{id:guid}/issue", IssueAsync);
+        group.MapGet("", ListAsync).WithSummary("Propostas com filtro por situação");
+        group.MapGet("/{id:guid}", DetailAsync).WithSummary("Proposta com decisões versionadas e histórico");
+        group.MapPost("/{id:guid}/underwrite", UnderwriteAsync).WithSummary("Registra decisão de risco (versionada e imutável)");
+        group.MapPost("/{id:guid}/issue", IssueAsync).WithSummary("Emite a apólice — aceita Idempotency-Key");
     }
 
     // ---------------------------------------------------------------- consulta

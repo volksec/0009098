@@ -28,10 +28,10 @@ public static class CommissionEndpoints
     {
         var group = app.MapGroup("/api/commissions").WithTags("Comissões");
 
-        group.MapGet("", ListAsync);
-        group.MapGet("/monthly", MonthlyAsync);
-        group.MapPost("/{id:guid}/release", ReleaseAsync);
-        group.MapPost("/{id:guid}/reverse", ReverseAsync);
+        group.MapGet("", ListAsync).WithSummary("Extrato do corretor autenticado (política RESTRICTIVE)");
+        group.MapGet("/monthly", MonthlyAsync).WithSummary("Consolidação por competência");
+        group.MapPost("/{id:guid}/release", ReleaseAsync).WithSummary("Libera comissão prevista");
+        group.MapPost("/{id:guid}/reverse", ReverseAsync).WithSummary("Estorna criando lançamento inverso");
     }
 
     private static async Task<IResult> ListAsync(

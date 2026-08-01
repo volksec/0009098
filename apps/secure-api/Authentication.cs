@@ -152,9 +152,12 @@ public static class AuthEndpoints
     {
         var group = app.MapGroup("/api/auth").WithTags("Autenticação");
 
-        group.MapPost("/login", LoginAsync).AllowAnonymous();
-        group.MapGet("/me", MeAsync).RequireAuthorization();
-        group.MapGet("/demo-accounts", DemoAccountsAsync).AllowAnonymous();
+        group.MapPost("/login", LoginAsync).AllowAnonymous()
+             .WithSummary("Autentica e devolve o token de acesso (validade de 8 h)");
+        group.MapGet("/me", MeAsync).RequireAuthorization()
+             .WithSummary("Identidade do usuário do token — restaura a sessão no cliente");
+        group.MapGet("/demo-accounts", DemoAccountsAsync).AllowAnonymous()
+             .WithSummary("Contas de demonstração, uma por corretora (base sintética)");
     }
 
     private static async Task<IResult> LoginAsync(

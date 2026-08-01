@@ -23,10 +23,10 @@ public static class BillingEndpoints
     {
         var group = app.MapGroup("/api/billing").WithTags("Faturamento");
 
-        group.MapGet("/installments", ListAsync);
-        group.MapGet("/policies/{policyId:guid}/installments", ByPolicyAsync);
-        group.MapPost("/installments/{id:guid}/pay", PayAsync);
-        group.MapGet("/summary", SummaryAsync);
+        group.MapGet("/installments", ListAsync).WithSummary("Parcelas com filtro por situação e paginação");
+        group.MapGet("/policies/{policyId:guid}/installments", ByPolicyAsync).WithSummary("Plano de parcelamento de uma apólice");
+        group.MapPost("/installments/{id:guid}/pay", PayAsync).WithSummary("Quita parcela (pagamento simulado)");
+        group.MapGet("/summary", SummaryAsync).WithSummary("Resumo: pendentes, vencidas e quitadas");
     }
 
     private static async Task<IResult> ListAsync(

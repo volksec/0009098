@@ -19,12 +19,12 @@ public static class CustomerEndpoints
 
         // Rota vazia, e não "/": dentro de um MapGroup, "/" produz "/api/customers/" com
         // barra final, que não casa com "/api/customers" e devolve 405.
-        group.MapGet("", ListAsync);
-        group.MapGet("/{id:guid}", GetAsync);
-        group.MapPost("", CreateAsync);
-        group.MapPut("/{id:guid}", UpdateAsync);
-        group.MapDelete("/{id:guid}", SoftDeleteAsync);
-        group.MapPost("/{id:guid}/restore", RestoreAsync);
+        group.MapGet("", ListAsync).WithSummary("Lista clientes com busca, filtros e paginação");
+        group.MapGet("/{id:guid}", GetAsync).WithSummary("Cliente por identificador — 404 se for de outra corretora");
+        group.MapPost("", CreateAsync).WithSummary("Cadastra cliente (documento validado e único por corretora)");
+        group.MapPut("/{id:guid}", UpdateAsync).WithSummary("Edita cliente — documento e natureza não são editáveis");
+        group.MapDelete("/{id:guid}", SoftDeleteAsync).WithSummary("Exclusão lógica com motivo obrigatório e cascata");
+        group.MapPost("/{id:guid}/restore", RestoreAsync).WithSummary("Restaura cliente excluído logicamente");
     }
 
     // ---------------------------------------------------------------- consulta
