@@ -121,28 +121,44 @@ ok "Docker $(docker --version | sed 's/Docker version //;s/,.*//')"
 # ---------------------------------------------------------------- 2. ambiente
 step "Configurando ambiente"
 
+# Gera um segredo local e o grava na variável indicada do .env
+gerar_segredo() {
+  local var="$1" tamanho="${2:-24}" bytes="${3:-18}"
+  local secret
+  secret="$(head -c "$bytes" /dev/urandom | base64 | tr -d '/+=' | head -c "$tamanho")"
+  sed -i.bak "s|^${var}=.*|${var}=${secret}|" .env && rm -f .env.bak
+}
+
 if [ ! -f .env ]; then
   cp .env.example .env
-  # Gera senhas locais aleatórias em vez de usar os marcadores do exemplo
-  for var in POSTGRES_APP_USER_PASSWORD POSTGRES_APP_REGULATOR_PASSWORD POSTGRES_APP_WORKER_PASSWORD; do
-    secret="$(head -c 18 /dev/urandom | base64 | tr -d '/+=' | head -c 24)"
-    sed -i.bak "s|^${var}=.*|${var}=${secret}|" .env && rm -f .env.bak
-  done
-  # Chave de assinatura dos tokens: 48 bytes, bem acima do mínimo de 32 do HMAC-SHA256
-  jwt_key="$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | head -c 64)"
-  sed -i.bak "s|^JWT_SIGNING_KEY=.*|JWT_SIGNING_KEY=${jwt_key}|" .env && rm -f .env.bak
-  ok ".env criado com senhas geradas localmente"
-else
-  # Instalação anterior à autenticação não tem a chave; acrescenta sem tocar no resto
-  if ! grep -q '^JWT_SIGNING_KEY=' .env; then
-    jwt_key="$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | head -c 64)"
-    printf '
-JWT_SIGNING_KEY=%s
-' "$jwt_key" >> .env
-    ok ".env preservado — chave de assinatura acrescentada"
-  else
-    ok ".env já existe (preservado)"
+  ok ".env criado a partir do exemplo"
+fi
+
+# Acrescenta chave que instalação anterior não tinha, sem tocar no resto do arquivo
+grep -q '^JWT_SIGNING_KEY=' .env || echo 'JWT_SIGNING_KEY=troque_este_valor_local' >> .env
+
+# Troca TODO marcador que tenha sobrado — inclusive em .env preservado de instalação
+# anterior. Sem isto o arquivo podia continuar com "troque_este_valor_local" enquanto o
+# banco fora criado com senha aleatória: a API subia e devolvia 500 em toda requisição,
+# sem nada no console dizendo o porquê.
+trocados=0
+for var in POSTGRES_APP_USER_PASSWORD POSTGRES_APP_REGULATOR_PASSWORD POSTGRES_APP_WORKER_PASSWORD; do
+  if grep -q "^${var}=troque_este_valor_local$" .env; then
+    gerar_segredo "$var" 24 18
+    trocados=$((trocados + 1))
   fi
+done
+
+if grep -q '^JWT_SIGNING_KEY=troque_este_valor_local$' .env; then
+  # 48 bytes, bem acima do mínimo de 32 do HMAC-SHA256
+  gerar_segredo JWT_SIGNING_KEY 64 48
+  trocados=$((trocados + 1))
+fi
+
+if [ "$trocados" -gt 0 ]; then
+  ok "$trocados segredo(s) gerado(s) localmente no .env"
+else
+  ok ".env já configurado (preservado)"
 fi
 
 mkdir -p infrastructure/secrets "$LOG_DIR"
@@ -171,7 +187,7 @@ dotnet build --nologo -v q --configuration Release >/dev/null 2>&1 \
   && ok "solução compilada" || die "falha na compilação — rode 'dotnet build' para ver o detalhe"
 
 # ---------------------------------------------------------------- 4. banco
-step "Subindo PostgreSQL e Redis"
+step "Subindo PostgreSQL"
 
 if [ "$RESET" = "1" ]; then
   warn "--reset: removendo volumes e recriando o banco"
@@ -195,6 +211,26 @@ printf "\n"
 ok "PostgreSQL pronto"
 
 psql_exec() { docker exec -i "$DB_CONTAINER" psql -U "$DB_MIGRATOR" -d "$DB_NAME" -v ON_ERROR_STOP=1 -q "$@"; }
+
+# A credencial da aplicação precisa ser testada de verdade, e não presumida.
+#
+# As senhas dos papéis são gravadas quando o volume nasce. Se o .env for trocado depois
+# — outro clone, arquivo restaurado, marcador que sobrou —, o banco continua com a senha
+# antiga e a API sobe normalmente para devolver 500 em toda requisição. O sintoma aparece
+# longe da causa: o console diz "ambiente pronto" e a tela mostra erro.
+#
+# A verificação usa o papel app_user pela porta publicada, que é o caminho exato da
+# aplicação. Conexão de dentro do contêiner não serve: é trust e passaria mesmo errada.
+if ! docker run --rm --network host -e PGPASSWORD="${POSTGRES_APP_USER_PASSWORD:-}"      postgres:16.4-alpine psql -h 127.0.0.1 -p 5432 -U app_user -d "$DB_NAME"      -tAc 'SELECT 1' >/dev/null 2>&1; then
+  die "o banco recusou a senha de app_user do .env.
+
+  O volume foi criado com outra senha. Recrie o banco com o .env atual:
+
+      ./start.sh --reset
+
+  Isso apaga os dados locais — que são sintéticos e recarregados pelo seed."
+fi
+ok "credencial da aplicação verificada" 
 
 # ---------------------------------------------------------------- 5. migrations
 step "Aplicando migrations"
