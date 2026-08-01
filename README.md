@@ -123,7 +123,7 @@ git clone https://github.com/volksec/0009098.git && cd 0009098
 
 O script executa, em ordem: verifica pré-requisitos → gera `.env` com senhas aleatórias →
 restaura pacotes .NET e npm → compila → sobe PostgreSQL e Redis → aguarda o healthcheck →
-aplica as 9 migrations → carrega a massa sintética → inicia backend e frontend → imprime as URLs.
+aplica as 12 migrations → carrega a massa sintética → inicia backend e frontend → imprime as URLs.
 
 ### 2.3 Instalação manual
 
@@ -620,11 +620,11 @@ toda a lógica de negócio sem banco, sem HTTP e sem mock de framework.
 
 | Camada | Escolha | Racional |
 |---|---|---|
-| **Backend** | .NET 9, ASP.NET Core (Minimal API), EF Core, Dapper, FluentValidation, Serilog, Polly | Tipos fortes o bastante para expressar Value Objects e agregados; EF Core fornece *owned types*, query filters globais e `xmin` nativo; Dapper entra em leitura analítica, onde o ORM não agrega |
-| **Frontend** | React, TypeScript, Vite, Tailwind, shadcn/ui, TanStack Query, React Hook Form + Zod, Storybook, Cytoscape.js, Monaco | Tipagem ponta a ponta; componentes shadcn ficam no repositório, então o design system é próprio; Cytoscape para o grafo do Database Explorer; Monaco para SQL e planos de execução |
-| **Dados** | PostgreSQL 16, Redis | Detalhado na [seção 6](#6-banco-objeto-relacional) |
+| **Backend** | .NET 9, ASP.NET Core (Minimal API), Dapper, Npgsql, EF Core, Swashbuckle | Tipos fortes o bastante para expressar Value Objects e agregados. Dapper carrega as consultas: recursos como tipos compostos, `daterange` e `xmin` são escritos em SQL direto, onde ficam legíveis. EF Core está referenciado para *owned types* e query filters, mas a fatia atual usa Dapper |
+| **Frontend** | React, TypeScript, Vite | **Três dependências de runtime, e nenhuma de interface.** O design system é escrito à mão em CSS com tokens `pdc-*` — trazer Tailwind ou uma biblioteca de componentes contradiria o requisito de componentes próprios. Estado de servidor resolvido com um hook de 20 linhas em vez de TanStack Query, e validação com o mesmo schema do backend em vez de Zod |
+| **Dados** | PostgreSQL 16 | Detalhado na seção do banco objeto-relacional. Redis sobe no Compose mas **ainda não é usado pelo código** — está previsto para cache de catálogo e contador de rate limit |
 | **Mensageria** | Nenhuma — Outbox no PostgreSQL | Broker externo não oferece garantia transacional sem 2PC ([ADR-0007](docs/adr/0007-sem-message-broker.md)) |
-| **Testes** | xUnit, FluentAssertions, FsCheck, Testcontainers, Respawn, NetArchTest | PostgreSQL real nos testes de integração: RLS, `EXCLUDE`, tipos compostos e `xmin` não existem em banco em memória |
+| **Testes** | xUnit, FluentAssertions, FsCheck, Testcontainers, NetArchTest | PostgreSQL real nos testes de integração: RLS, `EXCLUDE`, tipos compostos e `xmin` não existem em banco em memória |
 | **Infra** | Docker Compose, GitHub Actions | Ambiente completo em um comando |
 
 [Alternativas descartadas e trade-offs](docs/architecture/overview.md)
@@ -951,20 +951,24 @@ dotnet test tests/integration   # requer Docker (Testcontainers)
 dotnet test tests/architecture  # fronteiras de módulo e regras de modelagem
 ```
 
-| Tipo | Escopo |
+**236 testes em quatro projetos.** A tabela abaixo lista o que existe e roda; nada aqui é
+plano ou intenção.
+
+| Projeto | Testes | Escopo |
+|---|---|---|
+| `tests/unit/…SharedKernel.Tests` | 89 | Value Objects: `Money` e alocação de centavos, `DocumentNumber`, `DateRange`, `TenantId`, contatos — inclui propriedades FsCheck sobre invariantes financeiras |
+| `tests/unit/…Domain.Tests` | 107 | Agregados, máquina de estados da proposta, emissão de apólice, contexto de tenant, cálculo de prêmio (curva de risco, recusas, ordenação dos planos) |
+| `tests/architecture` | 14 | NetArchTest: fronteiras entre módulos e regra de dependência apontando para dentro |
+| `tests/integration` | 26 | PostgreSQL 16 real via Testcontainers: isolamento por RLS, emissão concorrente com `xmin`, visibilidade dos workers e verificação de integridade |
+
+O que os testes de integração cobrem, em detalhe:
+
+| Cenário | Verificação |
 |---|---|
-| Unitários | Value Objects, agregados, invariantes, serviços de domínio, máquinas de estado |
-| Propriedade | FsCheck sobre invariantes financeiras e de alocação |
-| Integração | Testcontainers com PostgreSQL 16 real + Respawn |
-| RLS e isolamento | Cada camada derrubada isoladamente, verificando que as demais bloqueiam |
-| Autorização | RBAC, ABAC, escopo, finalidade |
-| Concorrência | Emissão simultânea, optimistic lock, `SKIP LOCKED` |
-| Idempotência e Outbox | Replay, entrega ao menos uma vez, consumo idempotente |
-| Rollback | Falha injetada em cada etapa da transação |
-| Arquiteturais | NetArchTest |
-| Performance | BenchmarkDotNet + k6 |
-| E2E | Playwright |
-| Segurança | Os 18 cenários automatizados |
+| RLS e isolamento | Conectam como `app_user` (sem `BYPASSRLS`); sem tenant nenhuma linha é visível, e o identificador exato de outro tenant retorna vazio |
+| Concorrência | Emissão simultânea da mesma proposta: apenas uma apólice sobrevive |
+| Cegueira de worker | Conta técnica precisa enxergar todos os tenants — contar zero é o modo de falha, não o sucesso |
+| Integridade | A violação é introduzida de propósito e a contagem precisa subir |
 
 Banco em memória não é usado em testes de integração: RLS, constraints de exclusão, tipos
 compostos, índices parciais e `xmin` não existem em SQLite.
