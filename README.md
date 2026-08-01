@@ -80,7 +80,7 @@ interface e no Live Processing Console.
 | **Domínio** | Rich Domain Model — agregados com invariantes, 19 Value Objects imutáveis, eventos de domínio, specifications, serviços de domínio |
 | **Escrita** | CRUD completo com validação em três camadas (DTO, domínio, banco), transações e mensagens de erro derivadas das constraints |
 | **Concorrência** | Optimistic locking com `xmin` nativo, chaves de idempotência, `SELECT ... FOR UPDATE SKIP LOCKED` |
-| **Multi-tenancy** | Isolamento em 5 camadas independentes, terminando em Row-Level Security com `FORCE` |
+| **Multi-tenancy** | Isolamento em camadas independentes, terminando em Row-Level Security com `FORCE` — 3 das 5 previstas ativas hoje, [detalhado adiante](#isolamento-multi-tenant-em-cinco-camadas) |
 | **Assincronismo** | Outbox transacional — evento e estado confirmados na mesma transação |
 | **Auditoria** | Trilha append-only imposta por `REVOKE` no banco, particionada por mês |
 | **Tempo real** | Live Processing Console via Server-Sent Events, com redação automática de dados sensíveis |
@@ -851,11 +851,28 @@ graph LR
     L3["<b>3. Query filter</b><br/>global do<br/>ORM"]
     L4["<b>4. Autorização</b><br/>por recurso<br/>RBAC + ABAC"]
     L5["<b>5. RLS</b><br/>FORCE ROW<br/>LEVEL SECURITY"]
-    classDef l fill:#DCE9FD,stroke:#1F6FEB,color:#0B2447
-    class L1,L2,L3,L4,L5 l
+    classDef ativa fill:#DCE9FD,stroke:#1F6FEB,color:#0B2447
+    classDef dormente fill:#F4F6F8,stroke:#8894A8,color:#6B7488,stroke-dasharray:4 3
+    class L2,L4,L5 ativa
+    class L1,L3 dormente
 ```
 
-A camada 1 é garantida pelo **sistema de tipos**: o Value Object `TenantId` não tem construtor
+**Duas das cinco camadas ainda não atuam, e o diagrama diz qual é qual.** Anunciar defesa em
+profundidade contando camada que não roda seria pior que ter menos camadas:
+
+| Camada | Hoje | Por quê |
+|---|---|---|
+| 1 · Claim do JWT | **dormente** | Não há autenticação: o tenant chega por cabeçalho, marcado como provisório no código |
+| 2 · Contexto imutável | ativa | `TenantId` sem construtor público, verificado por teste arquitetural |
+| 3 · Query filter do ORM | **dormente** | O `PortalDbContext` tem `HasQueryFilter` e os interceptors de auditoria e outbox, mas a fatia atual é Dapper de ponta a ponta — nenhuma requisição passa por ele |
+| 4 · Autorização por recurso | ativa | Ex.: emissão devolve `403 NOT_PROPOSAL_OWNER` a quem não é o corretor da proposta |
+| 5 · RLS com `FORCE` | ativa | 66 políticas, verificadas conectando como `app_user` sem `BYPASSRLS` |
+
+O ponto de projeto se sustenta mesmo assim: as camadas são **independentes**, e a última — a
+única que nenhum bug de aplicação contorna — está ativa e testada. As duas dormentes são as que
+dependem de autenticação, e é por isso que ela é a lacuna mais visível do estado atual.
+
+A camada 2 é garantida pelo **sistema de tipos**: o Value Object `TenantId` não tem construtor
 público que aceite entrada de usuário.
 
 ```csharp

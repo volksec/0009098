@@ -36,3 +36,14 @@ a garantia fica na disciplina de quem escreve o código, não na infraestrutura.
   ausência de dado. Mitigado pelo Live Processing Console, que mostra a RLS sendo aplicada.
 - O teste de isolamento derruba cada camada isoladamente e prova que as demais seguram — é a
   evidência que transforma "defesa em profundidade" de slogan em fato demonstrável.
+
+## Estado da implementação
+
+Das cinco camadas decididas aqui, **três atuam hoje**: contexto imutável (2), autorização por
+recurso (4) e RLS com `FORCE` (5). As camadas 1 e 3 estão escritas mas dormentes — a primeira
+depende de autenticação, que ainda não existe, e a terceira vive no `PortalDbContext`, que a
+fatia atual não usa por ser Dapper de ponta a ponta.
+
+O registro fica aqui de propósito: uma ADR que descreve a decisão sem dizer o que dela chegou a
+rodar vira ficção arquitetural. A camada 5 — a única que nenhum bug de aplicação contorna — é a
+que está ativa e testada.
