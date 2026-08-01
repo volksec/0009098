@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ApiError, api, proposalApi, quotationApi,
-  type Broker, type CoverageOption, type Customer, type InsurableAsset,
+  ApiError, api, currentUser, proposalApi, quotationApi,
+  type CoverageOption, type Customer, type InsurableAsset,
   type PagedResult, type ProductVersion, type ProposalDetail, type ProposalSummary,
   type QuotationDetail, type QuotationSummary,
 } from './api'
@@ -85,9 +85,7 @@ const INITIAL: WizardState = {
 /** Ramo do produto compatível com o tipo de bem — evita cotar imóvel em produto de auto. */
 const BRANCH_FOR_ASSET: Record<string, string> = { VEHICLE: 'AUTO', PROPERTY: 'RESIDENTIAL' }
 
-function QuotationWizard({ tenantId, actorId, brokerId, brokerName, onDone, onCancel }: {
-  tenantId: string
-  actorId: string
+function QuotationWizard({ brokerId, brokerName, onDone, onCancel }: {
   brokerId: string
   brokerName: string
   onDone: (quotationId: string) => void
@@ -102,25 +100,25 @@ function QuotationWizard({ tenantId, actorId, brokerId, brokerName, onDone, onCa
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => { quotationApi.catalog(tenantId).then(setCatalog).catch(() => setCatalog(null)) },
-    [tenantId])
+  useEffect(() => { quotationApi.catalog().then(setCatalog).catch(() => setCatalog(null)) },
+    [])
 
   useEffect(() => {
     const handle = setTimeout(() => {
       // Só a carteira do corretor selecionado: a proposta herda o corretor do cliente,
       // então cotar cliente de outra carteira produziria uma proposta que este corretor
       // não poderia emitir.
-      api.customers(tenantId, { search: search || undefined, status: 'ACTIVE', brokerId, pageSize: 12 })
+      api.customers({ search: search || undefined, status: 'ACTIVE', brokerId, pageSize: 12 })
         .then((result: PagedResult<Customer>) => setCustomers(result.items))
         .catch(() => setCustomers([]))
     }, 220)
     return () => clearTimeout(handle)
-  }, [tenantId, search, brokerId])
+  }, [search, brokerId])
 
   const selectCustomer = async (customer: Customer) => {
     setForm({ ...INITIAL, customerId: customer.id })
     setAssets([])
-    const list = await quotationApi.assets(tenantId, customer.id)
+    const list = await quotationApi.assets(customer.id)
     setAssets(list)
     setStep(1)
   }
@@ -160,7 +158,7 @@ function QuotationWizard({ tenantId, actorId, brokerId, brokerName, onDone, onCa
     setSubmitting(true)
     setError(null)
     try {
-      const result = await quotationApi.create(tenantId, actorId, {
+      const result = await quotationApi.create({
         customerId: form.customerId,
         assetId: form.assetId,
         productVersionId: form.productVersionId,
@@ -423,9 +421,7 @@ function QuotationWizard({ tenantId, actorId, brokerId, brokerName, onDone, onCa
 
 // ================================================================ comparação de planos
 
-function QuotationDetailView({ tenantId, actorId, id, onConverted, onClose }: {
-  tenantId: string
-  actorId: string
+function QuotationDetailView({ id, onConverted, onClose }: {
   id: string
   onConverted: (proposalId: string) => void
   onClose: () => void
@@ -437,20 +433,20 @@ function QuotationDetailView({ tenantId, actorId, id, onConverted, onClose }: {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    quotationApi.detail(tenantId, id)
+    quotationApi.detail(id)
       .then((detail) => {
         setData(detail)
         if (detail.plans.length > 0 && !detail.plans.some((p) => p.plan === 'COMPLETE'))
           setChosen(detail.plans[0].plan)
       })
       .catch((err: ApiError) => setError(err.message))
-  }, [tenantId, id])
+  }, [id])
 
   const convert = async () => {
     setBusy(true)
     setError(null)
     try {
-      const proposal = await quotationApi.convert(tenantId, actorId, id, chosen, installments)
+      const proposal = await quotationApi.convert(id, chosen, installments)
       onConverted(proposal.id)
     } catch (err) {
       setError((err as ApiError).message)
@@ -612,9 +608,10 @@ function QuotationDetailView({ tenantId, actorId, id, onConverted, onClose }: {
 
 // ================================================================ página de cotações
 
-export function QuotationsPage({ tenantId }: { tenantId: string }) {
-  const [brokers, setBrokers] = useState<Broker[]>([])
-  const [actorId, setActorId] = useState('')
+export function QuotationsPage() {
+  // O corretor é quem está autenticado: não há mais seletor, e a carteira do assistente
+  // sai do próprio token.
+  const sessao = currentUser()
   const [data, setData] = useState<PagedResult<QuotationSummary> | null>(null)
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
@@ -623,21 +620,14 @@ export function QuotationsPage({ tenantId }: { tenantId: string }) {
   const [openId, setOpenId] = useState<string | null>(null)
   const { notify, view: toastView } = useToasts()
 
-  useEffect(() => {
-    api.brokers(tenantId).then((list) => {
-      setBrokers(list)
-      setActorId(list[0]?.userId ?? '')
-    })
-  }, [tenantId])
-
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setData(await quotationApi.list(tenantId, { status: status || undefined, page }))
+      setData(await quotationApi.list({ status: status || undefined, page }))
     } finally {
       setLoading(false)
     }
-  }, [tenantId, status, page])
+  }, [status, page])
 
   useEffect(() => { void load() }, [load])
 
@@ -646,8 +636,6 @@ export function QuotationsPage({ tenantId }: { tenantId: string }) {
       <>
         {toastView}
         <QuotationDetailView
-          tenantId={tenantId}
-          actorId={actorId}
           id={openId}
           onClose={() => { setOpenId(null); void load() }}
           onConverted={() => {
@@ -665,17 +653,6 @@ export function QuotationsPage({ tenantId }: { tenantId: string }) {
       {toastView}
 
       <div className="filters">
-        <select
-          className="search"
-          value={actorId}
-          onChange={(e) => setActorId(e.target.value)}
-          aria-label="Corretor responsável"
-        >
-          {brokers.map((b) => (
-            <option key={b.userId} value={b.userId}>{b.fullName}</option>
-          ))}
-        </select>
-
         <select className="search" value={status}
                 onChange={(e) => { setStatus(e.target.value); setPage(1) }}>
           <option value="">Todos os status</option>
@@ -685,7 +662,7 @@ export function QuotationsPage({ tenantId }: { tenantId: string }) {
           <option value="EXPIRED">Expiradas</option>
         </select>
 
-        <button className="btn" disabled={!actorId} onClick={() => setWizard(true)}>
+        <button className="btn" disabled={!sessao?.brokerId} onClick={() => setWizard(true)}>
           Nova cotação
         </button>
 
@@ -767,12 +744,10 @@ export function QuotationsPage({ tenantId }: { tenantId: string }) {
         )}
       </section>
 
-      {wizard && actorId && (
+      {wizard && sessao?.brokerId && (
         <QuotationWizard
-          tenantId={tenantId}
-          actorId={actorId}
-          brokerId={brokers.find((b) => b.userId === actorId)?.id ?? ''}
-          brokerName={brokers.find((b) => b.userId === actorId)?.fullName ?? ''}
+          brokerId={sessao.brokerId}
+          brokerName={sessao.name}
           onCancel={() => setWizard(false)}
           onDone={(id) => {
             setWizard(false)
@@ -787,9 +762,7 @@ export function QuotationsPage({ tenantId }: { tenantId: string }) {
 
 // ================================================================ propostas
 
-function ProposalDetailView({ tenantId, actorId, id, onClose, notify }: {
-  tenantId: string
-  actorId: string
+function ProposalDetailView({ id, onClose, notify }: {
   id: string
   onClose: () => void
   notify: (tone: 'ok' | 'error', message: string) => void
@@ -806,15 +779,15 @@ function ProposalDetailView({ tenantId, actorId, id, onClose, notify }: {
   const inFlight = useRef(false)
 
   const load = useCallback(async () => {
-    setData(await proposalApi.detail(tenantId, id))
-  }, [tenantId, id])
+    setData(await proposalApi.detail(id))
+  }, [id])
 
   useEffect(() => { void load() }, [load])
 
   const decide = async () => {
     setBusy(true); setError(null)
     try {
-      const result = await proposalApi.underwrite(tenantId, actorId, id, outcome, reason)
+      const result = await proposalApi.underwrite(id, outcome, reason)
       notify('ok', `Decisão versão ${result.version} registrada — proposta em ${result.status}.`)
       setReason('')
       await load()
@@ -833,7 +806,7 @@ function ProposalDetailView({ tenantId, actorId, id, onClose, notify }: {
     inFlight.current = true
     setBusy(true); setError(null)
     try {
-      const policy = await proposalApi.issue(tenantId, actorId, id, idempotencyKey)
+      const policy = await proposalApi.issue(id, idempotencyKey)
       notify('ok', `Apólice ${policy.number} emitida — ${policy.installments} parcela(s).`)
       await load()
     } catch (err) {
@@ -1037,9 +1010,7 @@ function ProposalDetailView({ tenantId, actorId, id, onClose, notify }: {
   )
 }
 
-export function ProposalsPage({ tenantId }: { tenantId: string }) {
-  const [brokers, setBrokers] = useState<Broker[]>([])
-  const [actorId, setActorId] = useState('')
+export function ProposalsPage() {
   const [data, setData] = useState<PagedResult<ProposalSummary> | null>(null)
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
@@ -1047,21 +1018,14 @@ export function ProposalsPage({ tenantId }: { tenantId: string }) {
   const [openId, setOpenId] = useState<string | null>(null)
   const { notify, view: toastView } = useToasts()
 
-  useEffect(() => {
-    api.brokers(tenantId).then((list) => {
-      setBrokers(list)
-      setActorId(list[0]?.userId ?? '')
-    })
-  }, [tenantId])
-
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setData(await proposalApi.list(tenantId, { status: status || undefined, page }))
+      setData(await proposalApi.list({ status: status || undefined, page }))
     } finally {
       setLoading(false)
     }
-  }, [tenantId, status, page])
+  }, [status, page])
 
   useEffect(() => { void load() }, [load])
 
@@ -1070,8 +1034,6 @@ export function ProposalsPage({ tenantId }: { tenantId: string }) {
       <>
         {toastView}
         <ProposalDetailView
-          tenantId={tenantId}
-          actorId={actorId}
           id={openId}
           notify={notify}
           onClose={() => { setOpenId(null); void load() }}
@@ -1085,17 +1047,6 @@ export function ProposalsPage({ tenantId }: { tenantId: string }) {
       {toastView}
 
       <div className="filters">
-        <select
-          className="search"
-          value={actorId}
-          onChange={(e) => setActorId(e.target.value)}
-          aria-label="Corretor responsável"
-        >
-          {brokers.map((b) => (
-            <option key={b.userId} value={b.userId}>{b.fullName}</option>
-          ))}
-        </select>
-
         <select className="search" value={status}
                 onChange={(e) => { setStatus(e.target.value); setPage(1) }}>
           <option value="">Todos os status</option>
@@ -1110,10 +1061,10 @@ export function ProposalsPage({ tenantId }: { tenantId: string }) {
       </div>
 
       <div className="note">
-        A emissão só é liberada para o <strong>corretor responsável pela proposta</strong>. Trocar
-        o corretor no seletor acima e tentar emitir devolve <code>403 NOT_PROPOSAL_OWNER</code> —
-        e mesmo que a checagem da aplicação fosse removida, a política <code>RESTRICTIVE</code> de
-        comissões recusaria a gravação no banco.
+        A emissão só é liberada para o <strong>corretor responsável pela proposta</strong>, e o
+        ator sai do token: entrar com outro corretor e tentar emitir devolve{' '}
+        <code>403 NOT_PROPOSAL_OWNER</code>. Mesmo que a checagem da aplicação fosse removida, a
+        política <code>RESTRICTIVE</code> de comissões recusaria a gravação no banco.
       </div>
 
       <section className="panel">

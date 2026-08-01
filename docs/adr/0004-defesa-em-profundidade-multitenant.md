@@ -39,11 +39,14 @@ a garantia fica na disciplina de quem escreve o código, não na infraestrutura.
 
 ## Estado da implementação
 
-Das cinco camadas decididas aqui, **três atuam hoje**: contexto imutável (2), autorização por
-recurso (4) e RLS com `FORCE` (5). As camadas 1 e 3 estão escritas mas dormentes — a primeira
-depende de autenticação, que ainda não existe, e a terceira vive no `PortalDbContext`, que a
-fatia atual não usa por ser Dapper de ponta a ponta.
+**Quatro camadas atuam, e não as cinco decididas aqui.** O claim do token passou a existir com a
+autenticação; a autorização por recurso e a RLS com `FORCE` sempre estiveram ativas; o contexto
+imutável é garantido por tipo.
+
+A camada que caiu foi o query filter global do ORM: a aplicação é Dapper de ponta a ponta, e o
+`PortalDbContext` que a implementava nunca era chamado. Ficou escrita e nunca executada, o que é
+pior do que não existir — passava a impressão de proteção que não havia. Foi removida junto com
+as referências a EF Core.
 
 O registro fica aqui de propósito: uma ADR que descreve a decisão sem dizer o que dela chegou a
-rodar vira ficção arquitetural. A camada 5 — a única que nenhum bug de aplicação contorna — é a
-que está ativa e testada.
+rodar vira ficção arquitetural.

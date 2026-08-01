@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  api, onRequest, probeCrossTenant,
-  type Brokerage, type DashboardSummary,
-  type Invariant, type LastRequest, type Policy, type RlsPolicy, type SchemaStats,
+  api, clearSession, currentUser, onRequest, probeCrossTenant, setUnauthorizedHandler,
+  type DashboardSummary, type Invariant, type LastRequest, type Policy,
+  type RlsPolicy, type SchemaStats, type SessionUser,
 } from './api'
+import { Login } from './Login'
 import { CustomerAdmin } from './CustomerAdmin'
 import { BillingPage, ClaimsPage, CommissionsPage } from './Operations'
 import { LiveConsole } from './LiveConsole'
@@ -84,9 +85,9 @@ function StatusBadge({ status }: { status: string }) {
 
 // ---------------------------------------------------------------- páginas
 
-function DashboardPage({ tenantId }: { tenantId: string }) {
+function DashboardPage() {
   const { data, loading, error } = useAsync<DashboardSummary>(
-    () => api.dashboard(tenantId), [tenantId])
+    () => api.dashboard(), [])
 
   if (loading) return <div className="state">Carregando…</div>
   if (error) return <div className="state">Falha: {error}</div>
@@ -142,8 +143,8 @@ function DashboardPage({ tenantId }: { tenantId: string }) {
   )
 }
 
-function PoliciesPage({ tenantId }: { tenantId: string }) {
-  const { data, loading, error } = useAsync<Policy[]>(() => api.policies(tenantId), [tenantId])
+function PoliciesPage() {
+  const { data, loading, error } = useAsync<Policy[]>(() => api.policies(), [])
 
   return (
     <Panel title="Apólices" subtitle="Vigência armazenada como daterange nativo do PostgreSQL">
@@ -268,53 +269,62 @@ function EngineeringPage() {
   )
 }
 
-function IsolationPage({ tenantId, brokerages }: { tenantId: string; brokerages: Brokerage[] }) {
-  const others = brokerages.filter((b) => b.id !== tenantId)
-  const [targetTenant, setTargetTenant] = useState(others[0]?.id ?? '')
+/**
+ * Demonstração de isolamento, agora que o tenant sai do token.
+ *
+ * Antes a página buscava um cliente de outra corretora e forjava o cabeçalho de tenant.
+ * Com a autenticação isso deixou de ser possível — e a demonstração ficou mais forte:
+ * quem avalia entra como corretor de uma corretora, copia um identificador real, sai,
+ * entra como corretor de outra e cola aqui. O recurso existe e mesmo assim some.
+ */
+function IsolationPage({ user }: { user: SessionUser }) {
+  const [id, setId] = useState('')
   const [result, setResult] = useState<{ status: number; durationMs: number; id: string } | null>(null)
   const [running, setRunning] = useState(false)
 
   const run = useCallback(async () => {
-    if (!targetTenant) return
+    const alvo = id.trim()
+    if (!alvo) return
+
     setRunning(true)
     setResult(null)
     try {
-      // Pega um cliente REAL do outro tenant e tenta acessá-lo com o tenant corrente
-      const foreign = await api.customers(targetTenant, { pageSize: 1 })
-      if (foreign.items.length === 0) { setRunning(false); return }
-
-      const victim = foreign.items[0]
-      const probe = await probeCrossTenant(tenantId, victim.id)
-      setResult({ status: probe.status, durationMs: probe.durationMs, id: victim.id })
+      const probe = await probeCrossTenant(alvo)
+      setResult({ status: probe.status, durationMs: probe.durationMs, id: alvo })
     } finally {
       setRunning(false)
     }
-  }, [targetTenant, tenantId])
+  }, [id])
 
   return (
     <Panel
       title="Isolamento entre corretoras"
-      subtitle="Tenta acessar um cliente de outro tenant usando o identificador exato"
+      subtitle="Busca um cliente pelo identificador exato, com o token da sessão atual"
     >
       <div style={{ padding: 16 }}>
         <p style={{ marginTop: 0, fontSize: 13.5, color: 'var(--pdc-slate-700)' }}>
-          O teste busca um cliente real de outra corretora, captura o <code>id</code> dele e
-          solicita <code>GET /api/customers/{'{id}'}</code> com o tenant corrente. É o cenário
-          IDOR: o atacante já conhece o identificador.
+          Você está autenticado como <strong>{user.name}</strong>, da{' '}
+          <strong>{user.tenantName}</strong>. Para reproduzir o cenário IDOR — em que o atacante
+          já conhece o identificador do recurso:
         </p>
 
+        <ol style={{ fontSize: 13.5, color: 'var(--pdc-slate-700)', lineHeight: 1.7 }}>
+          <li>Abra <strong>Clientes</strong> e copie o identificador de um cliente desta corretora.</li>
+          <li>Cole abaixo e execute: deve responder <strong>200</strong>, porque é seu.</li>
+          <li>Saia, entre com um corretor de <strong>outra</strong> corretora e cole o mesmo
+              identificador: o mesmo recurso passa a responder <strong>404</strong>.</li>
+        </ol>
+
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select
+          <input
             className="search"
-            value={targetTenant}
-            onChange={(event) => setTargetTenant(event.target.value)}
-          >
-            {others.map((b) => (
-              <option key={b.id} value={b.id}>Cliente da {b.tradeName}</option>
-            ))}
-          </select>
-          <button className="btn" onClick={run} disabled={running}>
-            {running ? 'Executando…' : 'Executar tentativa'}
+            style={{ flex: 1, minWidth: 320 }}
+            placeholder="identificador do cliente (UUID)"
+            value={id}
+            onChange={(event) => setId(event.target.value)}
+          />
+          <button className="btn" onClick={run} disabled={running || !id.trim()}>
+            {running ? 'Executando…' : 'Buscar'}
           </button>
         </div>
 
@@ -323,25 +333,32 @@ function IsolationPage({ tenantId, brokerages }: { tenantId: string; brokerages:
             {result.status === 404 ? (
               <>
                 <strong>Bloqueado — HTTP 404</strong> em {result.durationMs} ms.<br />
-                O recurso <code className="mono">{result.id}</code> existe no banco, mas a
-                Row-Level Security o torna invisível para este tenant, então a consulta retorna
-                zero linhas e a API responde 404.<br />
+                Se este identificador veio de outra corretora, ele existe no banco: a
+                Row-Level Security é que o torna invisível para o tenant do seu token, então a
+                consulta retorna zero linhas e a API responde 404.<br />
                 <br />
                 A resposta é <strong>404 e não 403</strong> de propósito: um 403 confirmaria que o
                 recurso existe, transformando o controle de acesso em oráculo de enumeração.
               </>
+            ) : result.status === 200 ? (
+              <>
+                <strong>Encontrado — HTTP 200</strong> em {result.durationMs} ms. Este cliente
+                pertence à sua corretora. Repita o passo 3 entrando por outra para ver o mesmo
+                identificador desaparecer.
+              </>
             ) : (
               <>
-                <strong>Retornou HTTP {result.status}</strong> — o isolamento falhou.
+                <strong>HTTP {result.status}</strong> — resposta inesperada para este cenário.
               </>
             )}
           </div>
         )}
 
         <div className="note">
-          Este é o comportamento da camada 5 (RLS). As outras quatro — claim do token, contexto
-          imutável, filtro global do ORM e autorização por recurso — atuam antes e são verificadas
-          na suíte de testes de integração.
+          O tenant sai do <strong>claim do token assinado</strong>: não há cabeçalho a forjar.
+          Trocar de corretora exige entrar com um usuário dela. Esse é o comportamento da
+          camada 5 (RLS) sob a camada 1 (autenticação) — as demais são verificadas na suíte
+          de integração.
         </div>
       </div>
     </Panel>
@@ -352,20 +369,24 @@ function IsolationPage({ tenantId, brokerages }: { tenantId: string; brokerages:
 
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard')
-  const [tenantId, setTenantId] = useState<string>('')
+  const [user, setUser] = useState<SessionUser | null>(() => currentUser())
   const [lastRequest, setLastRequest] = useState<LastRequest | null>(null)
 
-  const { data: brokerages } = useAsync<Brokerage[]>(() => api.brokerages(), [])
-
   useEffect(() => onRequest(setLastRequest), [])
-  useEffect(() => {
-    if (!tenantId && brokerages && brokerages.length > 0) setTenantId(brokerages[0].id)
-  }, [brokerages, tenantId])
 
-  const current = brokerages?.find((b) => b.id === tenantId)
+  // Token expirado em qualquer chamada devolve à tela de entrada, sem tela travada
+  useEffect(() => setUnauthorizedHandler(() => setUser(null)), [])
+
+  const sair = () => {
+    clearSession()
+    setUser(null)
+    setPage('dashboard')
+  }
+
+  if (!user) return <Login onEntrar={setUser} />
 
   const heading: Record<Page, { title: string; subtitle: string }> = {
-    dashboard: { title: 'Painel do corretor', subtitle: 'Indicadores da carteira no tenant selecionado' },
+    dashboard: { title: 'Painel do corretor', subtitle: 'Indicadores da carteira do corretor autenticado' },
     admin: {
       title: 'Administração de clientes',
       subtitle: 'Cadastro, edição e exclusão lógica persistidos diretamente no PostgreSQL',
@@ -428,16 +449,14 @@ export default function App() {
         </nav>
 
         <div className="tenant-picker">
-          <label htmlFor="tenant">Corretora (tenant)</label>
-          <select
-            id="tenant"
-            value={tenantId}
-            onChange={(event) => setTenantId(event.target.value)}
-          >
-            {brokerages?.map((b) => (
-              <option key={b.id} value={b.id}>{b.tradeName}</option>
-            ))}
-          </select>
+          <label>Sessão</label>
+          <div className="session-card">
+            <div className="session-name">{user.name}</div>
+            <div className="session-tenant">{user.tenantName}</div>
+          </div>
+          <button className="btn ghost small" onClick={sair} style={{ width: '100%' }}>
+            Sair
+          </button>
         </div>
       </aside>
 
@@ -446,29 +465,25 @@ export default function App() {
           <h1>{heading[page].title}</h1>
           <p>
             {heading[page].subtitle}
-            {current && page !== 'engineering' && <> · <strong>{current.tradeName}</strong></>}
+            {page !== 'engineering' && <> · <strong>{user.tenantName}</strong></>}
           </p>
         </div>
 
-        {!tenantId && <div className="state">Carregando corretoras…</div>}
-
-        {tenantId && page === 'dashboard' && <DashboardPage tenantId={tenantId} />}
-        {tenantId && page === 'admin' && <CustomerAdmin key={tenantId} tenantId={tenantId} />}
-        {tenantId && page === 'billing' && <BillingPage key={tenantId} tenantId={tenantId} />}
-        {tenantId && page === 'commissions' && <CommissionsPage key={tenantId} tenantId={tenantId} />}
-        {tenantId && page === 'claims' && <ClaimsPage key={tenantId} tenantId={tenantId} />}
+        {page === 'dashboard' && <DashboardPage />}
+        {page === 'admin' && <CustomerAdmin />}
+        {page === 'billing' && <BillingPage />}
+        {page === 'commissions' && <CommissionsPage />}
+        {page === 'claims' && <ClaimsPage />}
         {page === 'console' && <LiveConsole />}
-        {tenantId && page === 'quotations' && <QuotationsPage key={tenantId} tenantId={tenantId} />}
-        {tenantId && page === 'proposals' && <ProposalsPage key={tenantId} tenantId={tenantId} />}
-        {tenantId && page === 'policies' && <PoliciesPage tenantId={tenantId} />}
+        {page === 'quotations' && <QuotationsPage />}
+        {page === 'proposals' && <ProposalsPage />}
+        {page === 'policies' && <PoliciesPage />}
         {page === 'engineering' && <EngineeringPage />}
-        {tenantId && page === 'isolation' && (
-          <IsolationPage tenantId={tenantId} brokerages={brokerages ?? []} />
-        )}
+        {page === 'isolation' && <IsolationPage user={user} />}
       </main>
 
       <footer className="trace-bar">
-        <span><span className="k">tenant</span> <span className="v mono">{tenantId.slice(0, 8) || '—'}</span></span>
+        <span><span className="k">sessão</span> <span className="v mono">{user.name}</span></span>
         <span><span className="k">rota</span> <span className="v mono">{lastRequest?.path ?? '—'}</span></span>
         <span><span className="k">status</span> <span className="v mono">{lastRequest?.status ?? '—'}</span></span>
         <span><span className="k">duração</span> <span className="v mono">{lastRequest ? `${lastRequest.durationMs} ms` : '—'}</span></span>

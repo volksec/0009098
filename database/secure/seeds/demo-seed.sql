@@ -142,6 +142,56 @@ DECLARE
     v_company text[] := ARRAY['Transportes','Comércio','Serviços','Indústria','Logística',
                               'Construtora','Distribuidora','Consultoria'];
 
+    -- Senha de demonstração para TODOS os usuários: Corretor@2026
+    --
+    -- Os hashes são PBKDF2-HMAC-SHA256 com 210 mil iterações, no formato que o
+    -- PasswordHasher da API lê: [versão][iterações][sal de 16 bytes][derivação de 32].
+    -- São 40 distintos, um por usuário, porque sal repetido permitiria atacar todas as
+    -- contas de uma vez — a senha ser a mesma é concessão de demonstração, o sal não.
+    -- Gerados fora do banco: PBKDF2 em SQL exigiria 210 mil HMACs por usuário.
+    v_password_hashes bytea[] := ARRAY[
+        '\x01000334504360e037816ba9099c735321542ea6ba98f2eb41f32bfe990f49a79ac0cc367f0e2c287b2e8d8e557509948ae58dfec4',
+        '\x0100033450e6c0480c6c6cfcafed79e9ed1300dcc1af3a1d1f9a2ceb08ddefc522c025b37cb2f7e286575e5ef6f30675805cd7bf86',
+        '\x010003345006ca482f18aecadd003f8a04b1e9e16216d9814781c60e18e9379fb3761ac0886889f78fb09cf451d9219c0ee03642b3',
+        '\x01000334509c398dc69c03f491df614dafc5bb29fed169af5826a9a17bdc4d7809d3f51087da2d61d8feeb894477f5ff7811320575',
+        '\x0100033450c37211b8f40c38e8abb2361f5d2177a2607b438d4ad4f4e08239f6f7210bc6b5216c98345db1938c981a0fabeb87d056',
+        '\x01000334506fa1a34a3eeb6197d3244287928f36112ab90df2b06eb31300c07bca8d0b46dcec989320d8ba425be6ba36ae0e6cde33',
+        '\x01000334505cb56a06594b2341fd35dac7d7e42a86c33e29472b496d278aa5e820c406d14cf8ef7f68c7d0c09687baed5873d5bb4a',
+        '\x0100033450ff7f6927e42eb91ce42d43e0fe8692dd7ce916528e8ad9a371169ff7c8b242bf823347d01d99c6975d1baa8ec2d002c0',
+        '\x0100033450bdf852edd3f055458d1be983e66d6aab65522650387240a668771e5da0d0f85a6ed648f0d60b7fe383e373cbef8774d0',
+        '\x01000334503e267485c7265311563ab87d682ae25c71c9e9d3b4aaf0656dab83025b04a880e56ab751bd7b789c52565b9eac61647c',
+        '\x01000334501f0af7c7feca34b895df14c5f0d5fe3cfe6a214c1eebd74a02e35f97cb3818a31801c3ff60cbf06ab3ccd29b36debfea',
+        '\x01000334500642f501566a5051175ad2b5ea4c164177a4b1bfa126eb9c5fbfd78e24e6cc503be51d138abac4e403b639e06898ec83',
+        '\x01000334504ea8fc6343455599809dd9ea560baf50b079b6daf4161517fdc1c459033e89cf543ed806d3294d3b11b4882edf772168',
+        '\x01000334508c1cc958eec9043f19baa2d57a1bb783e1e4cb453001192943b4a67739cd55f68ca908b144005347e0f23b24b8083172',
+        '\x01000334500b1008825c0718936a75d6d3436684a2844660b71aa949b0b73b3a571f5ac97f0c37ae71fb7c24efeb7aace2cae49825',
+        '\x01000334509109561630817a603489ba8a1ac2cee6fbb047a2f65464facc18b5a1b71400fbda3d917a2668543e57aa3099dea5f654',
+        '\x01000334509de5d8feaa17b44fa3b7e8916f364ee1dd121ccec5ce2a0a48a1c18e56c0ad12327a9bceba9e2450e6bff3864760c6bf',
+        '\x01000334507169562570c640b5bdd4f514d5b5b3eb8bd945137f2e26b583fea382c056bde0f38469549617c128e22884412875bb41',
+        '\x0100033450577b68ffe2a199384922223396e10d6f05af7d4ae4e5a39ad36c0ce19f806c9f16295d0e20b41971cb8d250aaf9909e3',
+        '\x0100033450c0d2dda3c394adecab192d889393a83d202de98832cc333be6db76c50df7cc60c1081a7c2b9d84443a252f0e34d8fd00',
+        '\x010003345040e5d0967dd0efc32149bee74198ded8b345fc5329d6074ef673352d956c62e82f408ef2413a28f6985d2a910f6d6b6e',
+        '\x010003345074f2d3b8d32dec8a63fdb24519b8de7834c28cce38b916c82aefb85b667cfa7d2397caab50c129f25845bc05daac8ace',
+        '\x01000334502010562b53e1a58f20b4f34a34e111a0251c8fbe33da60de3a0be02ccab4244242b2ea11f16eb9391e4966828f8eccb5',
+        '\x0100033450eb4cd853f9eb7112a92c99edc2c269197ef6310402a8fc5e28b17a5a482af679242e81e6bb57881fb543212c252fad7a',
+        '\x0100033450e8988e3191ec3e34b4b85a9a8e59ff322edf7c0bc04f6db538dd49d0c0a35874ff29cb3cdea1304f94fba44a11c6909c',
+        '\x010003345014265d5d59a646bd3248f058660de3c7232c96e604f615ea89e30b19532cab8b9b3dbe7e6d6d6a7d07b5c2f5d6b9ad81',
+        '\x0100033450088dad15e3b8d96534879aa2cf47c8b07a1d322bb8ce2667807e5d93d1bffb2c5ab81f746dfd7225a16b86b066ffd178',
+        '\x0100033450555e4d3c03468ff2812a01e42dd6da542fbd0a4f3ef5ebd528855a9f1204bb5836e3761e5dadbe35329044223305e92e',
+        '\x01000334506b26b6ab1fd3cb47bc8878aa66ee630fd730c6b6ddb1bb5eb8242b224f87673a926acf578e347225bf9c92d8de2bf7e3',
+        '\x0100033450e77e15e2e868cd5c1c4d9159f2217720456c9ebe8276a08150ad20db25d98ec555f80f58eaa7752b2b85dff97fe0105a',
+        '\x010003345025f2050d349aa1a46f5d77b77af51d54b6b35091393ecf9f931f1edf504ce2770ee44bbc45d51d2e0756c272a2e17056',
+        '\x01000334501fa92f99f134bd916e9a6dedd1536944289999ac126cab757424384ba51f11d5edee349bbf72e1a41a29f477ccef7831',
+        '\x010003345070d07ad77e688eb6b14f59955a006227f4f01c80aaad3db81848f4f05b845d7672a988a8e541feaea1b20610252043c8',
+        '\x010003345030b07900903b3aa573a2acaf9c8f97d21e02773d7f57e1fa0be6f70c1005adfb6b0d7a1f029ba92a1b8c01388d30e9a6',
+        '\x01000334509607a285635ccd7a48d8592bdb6b96cd8bd809992d9e16b018ad2a74a8ee3eb2b8f616429c3b51e57229c39d66e7a936',
+        '\x0100033450cec4601227b075eb9af83dc5c3c3dd6678547d8e306479ed7952d8c8d4ad3d627c0432ffeaf1b82c13f1e9063f02dfef',
+        '\x01000334501c07dddcdf79225d552580cc3f727af1f6f0bd952792cd4a217ff97a32c5466e392b0cac8aeeeb0b836a05d4497b7d7c',
+        '\x0100033450e3a4e8cdb2d9afe244b8f18347a32ec946e7f68a58ac951dea57c021ce0cd7c09de525deac64acd3a95dda64180e8f8f',
+        '\x010003345053b5927141c235e23599360d95e1c30131b2c6b824af9637ff0d1ba358935592b68cd51cea64c96b5561aa227dd2fd91',
+        '\x01000334501a92b518955b9de79e2c85087e3f3f5d6786e8cde6739d1519410dd75e42d7ec0a56d4615b877121c938f2d868b42bb0'
+    ];
+
     v_tenant uuid; v_user uuid; v_broker uuid; v_customer uuid; v_asset uuid;
     v_quotation uuid; v_proposal uuid; v_policy uuid; v_plan uuid;
     v_product uuid; v_pv uuid; v_rule uuid; v_claim uuid;
@@ -180,8 +230,15 @@ BEGIN
 
             INSERT INTO users (id, tenant_id, email, password_hash, profile, display_name, created_by)
             VALUES (v_user, v_tenant,
-                    lower(replace(v_name,' ','.')) || v_seq || '@corretora' || t || '.test',
-                    '\x00', 'BROKER', v_name, '00000000-0000-0000-0000-000000000001')
+                    -- Sem acento: o endereço vira credencial de login, e e-mail com
+                    -- caractere não-ASCII exige SMTPUTF8 — o validador da API recusa, e
+                    -- 7 dos 36 usuários do seed ficavam impossibilitados de entrar.
+                    lower(translate(replace(v_name,' ','.'),
+                                    'áàâãéêíóôõúüçÁÀÂÃÉÊÍÓÔÕÚÜÇ',
+                                    'aaaaeeiooouucAAAAEEIOOOUUC'))
+                    || v_seq || '@corretora' || t || '.test',
+                    v_password_hashes[1 + (v_seq % 40)], 'BROKER', v_name,
+                    '00000000-0000-0000-0000-000000000001')
             ON CONFLICT DO NOTHING;
 
             INSERT INTO brokers (id, tenant_id, user_id, susep_registration, full_name, hired_at, created_by)

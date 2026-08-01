@@ -1,21 +1,92 @@
+using System.Text;
 using Dapper;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using PortalDoCorretor.SecureApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options => options.SwaggerDoc("v1", new()
+builder.Services.AddSwaggerGen(options =>
 {
-    Title = "Portal do Corretor — API",
-    Version = "v1",
-    Description = "Plataforma de gestão para corretores de seguros. "
-                + "Dados sintéticos; banco, transações e controles reais."
-}));
+    options.SwaggerDoc("v1", new()
+    {
+        Title = "Portal do Corretor — API",
+        Version = "v1",
+        Description = "Plataforma de gestão para corretores de seguros. "
+                    + "Dados sintéticos; banco, transações e controles reais. "
+                    + "Autentique-se em POST /api/auth/login e use o token em Authorize."
+    });
+
+    options.AddSecurityDefinition("Bearer", new()
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "Cole apenas o token devolvido pelo login."
+    });
+
+    options.AddSecurityRequirement(new()
+    {
+        [new() { Reference = new() {
+            Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme, Id = "Bearer" } }] = []
+    });
+});
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IDbConnectionFactory, NpgsqlConnectionFactory>();
 builder.Services.AddSingleton<ActivityStream>();
 builder.Services.AddScoped<RequestContext>();
+builder.Services.AddSingleton<TokenIssuer>();
+
+// ---------------------------------------------------------------- autenticação
+// O tenant deixa de vir por cabeçalho e passa a sair do claim do token assinado:
+// é a camada 1 do isolamento, a que faz as demais valerem para um usuário real.
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        var key = builder.Configuration["JWT_SIGNING_KEY"]
+            ?? throw new InvalidOperationException(
+                "JWT_SIGNING_KEY ausente. O start.sh gera uma no .env; a API recusa subir sem "
+              + "ela porque uma chave embutida no código assinaria token de qualquer instalação.");
+
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = TokenIssuer.Issuer,
+            ValidAudience = TokenIssuer.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+            // Sem tolerância: token expirado é token expirado. O padrão de 5 minutos
+            // estenderia silenciosamente toda sessão.
+            ClockSkew = TimeSpan.Zero
+        };
+
+        // O EventSource do navegador não envia cabeçalho Authorization; para o SSE o
+        // token vem na query string, que é aceita apenas nessa rota.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                if (string.IsNullOrEmpty(context.Token)
+                    && context.Request.Path.StartsWithSegments("/api/events/stream"))
+                    context.Token = context.Request.Query["access_token"];
+
+                return Task.CompletedTask;
+            }
+        };
+    });
+
+// Toda rota exige autenticação salvo quem declarar AllowAnonymous — o padrão nega,
+// então um endpoint novo nasce protegido em vez de nascer aberto por esquecimento.
+builder.Services.AddAuthorization(options =>
+    options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser().Build());
 
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
     .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
@@ -27,6 +98,8 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI(o => o.SwaggerEndpoint("/swagger/v1/swagger.json", "Portal do Corretor v1"));
 app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.Use(async (context, next) =>
 {
@@ -48,7 +121,8 @@ app.Use(async (context, next) =>
 
 // ---------------------------------------------------------------- health
 
-app.MapGet("/health/live", () => Results.Ok(new { status = "alive" })).WithTags("Health");
+app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }))
+   .WithTags("Health").AllowAnonymous();
 
 app.MapGet("/health/ready", async (IDbConnectionFactory factory) =>
 {
@@ -66,7 +140,7 @@ app.MapGet("/health/ready", async (IDbConnectionFactory factory) =>
     {
         return Results.Json(new { status = "unhealthy", reason = ex.GetType().Name }, statusCode: 503);
     }
-}).WithTags("Health");
+}).WithTags("Health").AllowAnonymous();
 
 // ---------------------------------------------------------------- corretoras
 
@@ -77,7 +151,7 @@ app.MapGet("/api/brokerages", async (IDbConnectionFactory factory) =>
         SELECT id, trade_name AS "tradeName", susep_registration AS "susepRegistration", status
           FROM brokerages WHERE deleted_at IS NULL ORDER BY trade_name
         """));
-}).WithTags("Corretoras");
+}).WithTags("Corretoras");   // exige token: a lista de corretoras não é pública
 
 // ---------------------------------------------------------------- índice da API
 // `/api` é prefixo de rota, não rota: sem isto, quem abrisse a URL anunciada pelo
@@ -92,17 +166,21 @@ app.MapGet("/api", (HttpContext http) =>
         nome = "Portal do Corretor — API",
         documentacao = $"{raiz}/swagger",
         especificacao = $"{raiz}/swagger/v1/swagger.json",
-        cabecalhos = new
+        autenticacao = new
         {
-            xTenantId = "obrigatório na maioria das rotas — identifica a corretora",
-            xActorId = "define quais comissões a política RESTRICTIVE torna visíveis",
-            idempotencyKey = "emissão de apólice: reenviar a mesma chave devolve a resposta original"
+            comoObterToken = "POST /api/auth/login com { email, password }",
+            comoUsar = "Authorization: Bearer <token>",
+            validade = "8 horas; não há refresh — expirar é sair",
+            tenant = "sai do claim do token assinado, não de cabeçalho: trocar de corretora "
+                   + "exige entrar com um usuário dela",
+            sse = "/api/events/stream aceita ?access_token=<token>, porque o EventSource do "
+                + "navegador não envia cabeçalho"
         },
-        // Começar por /api/brokerages é deliberado: é a única rota que dispensa
-        // X-Tenant-Id, e o id devolvido por ela alimenta todas as demais.
-        comecarPor = $"{raiz}/api/brokerages",
+        idempotencyKey = "emissão de apólice: reenviar a mesma chave devolve a resposta original",
+        comecarPor = $"{raiz}/api/auth/login",
         rotas = new
         {
+            autenticacao = "POST /api/auth/login · GET /api/auth/me",
             corretoras = "GET /api/brokerages",
             corretores = "GET /api/brokers",
             painel = "GET /api/dashboard",
@@ -119,10 +197,11 @@ app.MapGet("/api", (HttpContext http) =>
             eventos = "GET /api/events/stream (SSE) · GET /api/events/recent"
         }
     });
-}).WithTags("Índice").WithSummary("Mapa das rotas disponíveis");
+}).WithTags("Índice").WithSummary("Mapa das rotas disponíveis").AllowAnonymous();
 
 // ---------------------------------------------------------------- módulos
 // Cada área vive no próprio arquivo de endpoints; aqui só o registro.
+app.MapAuthEndpoints();       // login, bloqueio por tentativas, identidade corrente
 app.MapCustomerEndpoints();    // consulta, cadastro, edição, exclusão lógica, restauração
 app.MapBillingEndpoints();     // parcelas, pagamento simulado, inadimplência
 app.MapCommissionEndpoints();  // extrato, consolidação mensal, liberação, estorno

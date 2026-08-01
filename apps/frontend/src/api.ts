@@ -1,5 +1,54 @@
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
 
+// ---------------------------------------------------------------- sessão
+
+export interface SessionUser {
+  id: string
+  name: string
+  profile: 'BROKER' | 'REGULATOR'
+  tenantId: string | null
+  tenantName: string | null
+  brokerId: string | null
+}
+
+/**
+ * Token em `sessionStorage`, não em `localStorage`: some ao fechar a aba, e não fica
+ * disponível para outra aba do mesmo navegador. Nenhum dos dois protege contra XSS —
+ * cookie `HttpOnly` protegeria, mas exigiria lidar com CSRF, e a API é consumida por
+ * origem separada. A troca está registrada aqui para não parecer descuido.
+ */
+const TOKEN_KEY = 'pdc.token'
+const USER_KEY = 'pdc.user'
+
+let token: string | null = sessionStorage.getItem(TOKEN_KEY)
+
+export function currentToken(): string | null {
+  return token
+}
+
+export function currentUser(): SessionUser | null {
+  const raw = sessionStorage.getItem(USER_KEY)
+  return raw ? (JSON.parse(raw) as SessionUser) : null
+}
+
+export function saveSession(newToken: string, user: SessionUser): void {
+  token = newToken
+  sessionStorage.setItem(TOKEN_KEY, newToken)
+  sessionStorage.setItem(USER_KEY, JSON.stringify(user))
+}
+
+export function clearSession(): void {
+  token = null
+  sessionStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(USER_KEY)
+}
+
+/** Avisa a aplicação quando o token deixa de valer, para levar de volta ao login. */
+let onUnauthorized: (() => void) | null = null
+export function setUnauthorizedHandler(handler: () => void): void {
+  onUnauthorized = handler
+}
+
 export interface Brokerage {
   id: string
   tradeName: string
@@ -139,8 +188,7 @@ export class ApiError extends Error {
     status: number,
     message: string,
     code?: string,
-    fieldErrors?: Record<string, string[]>,
-  ) {
+    fieldErrors?: Record<string, string[]>) {
     super(message)
     this.name = 'ApiError'
     this.status = status
@@ -168,23 +216,21 @@ export function onRequest(listener: (value: LastRequest) => void) {
 }
 
 interface RequestOptions {
-  tenantId?: string
-  actorId?: string
   method?: string
   body?: unknown
   idempotencyKey?: string
+  /** Só o login usa: ainda não há token para enviar. */
+  anonymous?: boolean
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { tenantId, actorId, method = "GET", body, idempotencyKey } = options
+  const { method = "GET", body, idempotencyKey, anonymous } = options
   const started = performance.now()
 
   const headers: Record<string, string> = { Accept: 'application/json' }
-  // Provisório: enquanto não há autenticação, o tenant viaja por cabeçalho para
-  // permitir alternar de corretora. Passa a vir do claim do token com o login.
-  if (tenantId) headers['X-Tenant-Id'] = tenantId
-  // O ator determina quais comissoes a politica RESTRICTIVE torna visiveis
-  if (actorId) headers['X-Actor-Id'] = actorId
+  // Tenant e ator saem do claim do token — não há mais cabeçalho para o cliente
+  // escolher a corretora que quer enxergar.
+  if (!anonymous && token) headers.Authorization = `Bearer ${token}`
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   // Reenviar a mesma chave devolve a resposta original em vez de repetir o efeito
   if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey
@@ -205,6 +251,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
   listeners.forEach((listener) => listener(lastRequest!))
 
+  // Token expirado ou inválido: a sessão morre aqui, em um lugar só
+  if (response.status === 401 && !anonymous) {
+    clearSession()
+    onUnauthorized?.()
+  }
+
   if (response.status === 204) return undefined as T
 
   const payload = await response.json().catch(() => null)
@@ -223,12 +275,24 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return payload as T
 }
 
+export const authApi = {
+  login: (email: string, password: string) =>
+    request<{ token: string; expiresAt: string; user: SessionUser }>(
+      '/api/auth/login', { method: 'POST', body: { email, password }, anonymous: true }),
+
+  me: () => request<SessionUser>('/api/auth/me'),
+
+  demoAccounts: () =>
+    request<{ email: string; nome: string; corretora: string }[]>(
+      '/api/auth/demo-accounts', { anonymous: true }),
+}
+
 export const api = {
   brokerages: () => request<Brokerage[]>('/api/brokerages'),
-  brokers: (tenantId: string) => request<Broker[]>('/api/brokers', { tenantId }),
-  dashboard: (tenantId: string) => request<DashboardSummary>('/api/dashboard', { tenantId }),
+  brokers: () => request<Broker[]>('/api/brokers'),
+  dashboard: () => request<DashboardSummary>('/api/dashboard'),
 
-  customers: (tenantId: string, params: {
+  customers: (params: {
     search?: string; kind?: string; status?: string; brokerId?: string
     includeDeleted?: boolean; page?: number; pageSize?: number
   } = {}) => {
@@ -240,38 +304,45 @@ export const api = {
     if (params.includeDeleted) query.set('includeDeleted', 'true')
     query.set('page', String(params.page ?? 1))
     query.set('pageSize', String(params.pageSize ?? 20))
-    return request<PagedResult<Customer>>(`/api/customers?${query}`, { tenantId })
+    return request<PagedResult<Customer>>(`/api/customers?${query}`)
   },
 
-  customerById: (tenantId: string, id: string) =>
-    request<Customer>(`/api/customers/${id}`, { tenantId }),
+  customerById: (id: string) =>
+    request<Customer>(`/api/customers/${id}`),
 
-  createCustomer: (tenantId: string, input: CustomerInput) =>
-    request<{ id: string }>('/api/customers', { tenantId, method: 'POST', body: input }),
+  createCustomer: (input: CustomerInput) =>
+    request<{ id: string }>('/api/customers', { method: 'POST', body: input }),
 
-  updateCustomer: (tenantId: string, id: string, input: Omit<CustomerInput, "document" | "kind">) =>
-    request<{ id: string }>(`/api/customers/${id}`, { tenantId, method: 'PUT', body: input }),
+  updateCustomer: (id: string, input: Omit<CustomerInput, "document" | "kind">) =>
+    request<{ id: string }>(`/api/customers/${id}`, { method: 'PUT', body: input }),
 
-  deleteCustomer: (tenantId: string, id: string, reason: string) =>
+  deleteCustomer: (id: string, reason: string) =>
     request<{ id: string }>(`/api/customers/${id}`, {
-      tenantId, method: 'DELETE', body: { reason },
+      method: 'DELETE', body: { reason },
     }),
 
-  restoreCustomer: (tenantId: string, id: string) =>
-    request<{ id: string }>(`/api/customers/${id}/restore`, { tenantId, method: 'POST' }),
+  restoreCustomer: (id: string) =>
+    request<{ id: string }>(`/api/customers/${id}/restore`, { method: 'POST' }),
 
-  policies: (tenantId: string) => request<Policy[]>('/api/policies?limit=50', { tenantId }),
+  policies: () => request<Policy[]>('/api/policies?limit=50'),
   schema: () => request<SchemaStats>('/api/engineering/schema'),
   rls: () => request<RlsPolicy[]>('/api/engineering/rls'),
   invariants: () => request<Invariant[]>('/api/engineering/invariants'),
   recentEvents: () => request<ProcessingEvent[]>('/api/events/recent'),
 }
 
-/** Tenta acessar um recurso com o tenant errado — demonstração de isolamento. */
-export async function probeCrossTenant(tenantId: string, customerId: string) {
+/**
+ * Tenta acessar um cliente pelo identificador exato, com o token da sessão corrente.
+ *
+ * Antes da autenticação a sonda forjava o cabeçalho de tenant; hoje isso é impossível,
+ * porque o tenant sai do claim assinado. A demonstração ficou mais forte: o avaliador
+ * entra como corretor de uma corretora, copia um identificador real, entra como
+ * corretor de outra e cola aqui — e o recurso, que existe, some.
+ */
+export async function probeCrossTenant(customerId: string) {
   const started = performance.now()
   const response = await fetch(`${BASE_URL}/api/customers/${customerId}`, {
-    headers: { 'X-Tenant-Id': tenantId },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   return {
     status: response.status,
@@ -283,10 +354,12 @@ export async function probeCrossTenant(tenantId: string, customerId: string) {
 /** Conecta ao stream SSE do Live Processing Console. */
 export function connectEventStream(
   onEvent: (event: ProcessingEvent) => void,
-  onStateChange: (state: 'connecting' | 'open' | 'closed') => void,
-): () => void {
+  onStateChange: (state: 'connecting' | 'open' | 'closed') => void): () => void {
   onStateChange('connecting')
-  const source = new EventSource(`${BASE_URL}/api/events/stream`)
+  // O EventSource do navegador não aceita cabeçalhos: o token vai na query, que a API
+  // aceita apenas nesta rota.
+  const source = new EventSource(
+    `${BASE_URL}/api/events/stream?access_token=${encodeURIComponent(token ?? '')}`)
 
   source.onopen = () => onStateChange('open')
 
@@ -403,74 +476,68 @@ export interface ClaimDetail {
 }
 
 export const billingApi = {
-  summary: (tenantId: string) =>
-    request<BillingSummary>('/api/billing/summary', { tenantId }),
+  summary: () =>
+    request<BillingSummary>('/api/billing/summary'),
 
-  installments: (tenantId: string, params: { status?: string; page?: number } = {}) => {
+  installments: (params: { status?: string; page?: number } = {}) => {
     const query = new URLSearchParams()
     if (params.status) query.set('status', params.status)
     query.set('page', String(params.page ?? 1))
     query.set('pageSize', '15')
-    return request<PagedResult<Installment>>(`/api/billing/installments?${query}`, { tenantId })
+    return request<PagedResult<Installment>>(`/api/billing/installments?${query}`)
   },
 
-  pay: (tenantId: string, id: string, method: string) =>
+  pay: (id: string, method: string) =>
     request<{ id: string; status: string }>(`/api/billing/installments/${id}/pay`, {
-      tenantId, method: 'POST', body: { method },
+      method: 'POST', body: { method },
     }),
 }
 
 export const commissionApi = {
-  list: (tenantId: string, actorId: string, params: { status?: string; page?: number } = {}) => {
+  list: (params: { status?: string; page?: number } = {}) => {
     const query = new URLSearchParams()
     if (params.status) query.set('status', params.status)
     query.set('page', String(params.page ?? 1))
     query.set('pageSize', '15')
-    return request<PagedResult<Commission>>(`/api/commissions?${query}`, { tenantId, actorId })
+    return request<PagedResult<Commission>>(`/api/commissions?${query}`)
   },
 
-  monthly: (tenantId: string, actorId: string) =>
-    request<MonthlyCommission[]>('/api/commissions/monthly', { tenantId, actorId }),
+  monthly: () =>
+    request<MonthlyCommission[]>('/api/commissions/monthly'),
 
-  release: (tenantId: string, actorId: string, id: string) =>
-    request<{ id: string }>(`/api/commissions/${id}/release`, {
-      tenantId, actorId, method: 'POST',
-    }),
+  release: (id: string) =>
+    request<{ id: string }>(`/api/commissions/${id}/release`, { method: 'POST' }),
 
-  reverse: (tenantId: string, actorId: string, id: string, reason: string) =>
+  reverse: (id: string, reason: string) =>
     request<{ reversalId: string }>(`/api/commissions/${id}/reverse`, {
-      tenantId, actorId, method: 'POST', body: { reason },
+      method: 'POST', body: { reason },
     }),
 }
 
 export const claimApi = {
-  list: (tenantId: string, params: { status?: string; page?: number } = {}) => {
+  list: (params: { status?: string; page?: number } = {}) => {
     const query = new URLSearchParams()
     if (params.status) query.set('status', params.status)
     query.set('page', String(params.page ?? 1))
     query.set('pageSize', '15')
-    return request<PagedResult<Claim>>(`/api/claims?${query}`, { tenantId })
+    return request<PagedResult<Claim>>(`/api/claims?${query}`)
   },
 
-  detail: (tenantId: string, id: string) =>
-    request<ClaimDetail>(`/api/claims/${id}`, { tenantId }),
+  detail: (id: string) =>
+    request<ClaimDetail>(`/api/claims/${id}`),
 
-  report: (tenantId: string, input: {
+  report: (input: {
     policyId: string; occurrenceDate: string; description: string; estimatedAmount?: number | null
-  }) => request<{ id: string; number: string }>('/api/claims', {
-    tenantId, method: 'POST', body: input,
-  }),
+  }) => request<{ id: string; number: string }>('/api/claims', { method: 'POST', body: input }),
 
-  addEvent: (tenantId: string, id: string, kind: string, description: string) =>
+  addEvent: (id: string, kind: string, description: string) =>
     request<{ sequence: number }>(`/api/claims/${id}/events`, {
-      tenantId, method: 'POST', body: { kind, description },
+      method: 'POST', body: { kind, description },
     }),
 
-  decide: (tenantId: string, id: string, input: {
+  decide: (id: string, input: {
     outcome: string; reason: string; settledAmount?: number | null
-  }) => request<{ status: string }>(`/api/claims/${id}/decide`, {
-    tenantId, method: 'POST', body: input,
-  }),
+  }) => request<{ status: string }>(`/api/claims/${id}/decide`, { method: 'POST', body: input }),
 }
 
 // ---------------------------------------------------------------- cotação e proposta
@@ -608,57 +675,57 @@ export interface QuotationInput {
 }
 
 export const quotationApi = {
-  catalog: (tenantId: string) =>
+  catalog: () =>
     request<{ products: ProductVersion[]; coverages: CoverageOption[] }>(
-      '/api/products', { tenantId }),
+      '/api/products'),
 
-  assets: (tenantId: string, customerId: string) =>
-    request<InsurableAsset[]>(`/api/customers/${customerId}/assets`, { tenantId }),
+  assets: (customerId: string) =>
+    request<InsurableAsset[]>(`/api/customers/${customerId}/assets`),
 
-  list: (tenantId: string, params: { status?: string; page?: number } = {}) => {
+  list: (params: { status?: string; page?: number } = {}) => {
     const query = new URLSearchParams()
     if (params.status) query.set('status', params.status)
     query.set('page', String(params.page ?? 1))
     query.set('pageSize', '15')
-    return request<PagedResult<QuotationSummary>>(`/api/quotations?${query}`, { tenantId })
+    return request<PagedResult<QuotationSummary>>(`/api/quotations?${query}`)
   },
 
-  detail: (tenantId: string, id: string) =>
-    request<QuotationDetail>(`/api/quotations/${id}`, { tenantId }),
+  detail: (id: string) =>
+    request<QuotationDetail>(`/api/quotations/${id}`),
 
-  create: (tenantId: string, actorId: string, input: QuotationInput) =>
+  create: (input: QuotationInput) =>
     request<{ id: string; number: string; riskScore: number; riskBand: string }>(
-      '/api/quotations', { tenantId, actorId, method: 'POST', body: input }),
+      '/api/quotations', { method: 'POST', body: input }),
 
-  convert: (tenantId: string, actorId: string, id: string, plan: string, installmentCount: number) =>
+  convert: (id: string, plan: string, installmentCount: number) =>
     request<{ id: string; number: string }>(`/api/quotations/${id}/convert`, {
-      tenantId, actorId, method: 'POST', body: { plan, installmentCount },
+      method: 'POST', body: { plan, installmentCount },
     }),
 }
 
 export const proposalApi = {
-  list: (tenantId: string, params: { status?: string; page?: number } = {}) => {
+  list: (params: { status?: string; page?: number } = {}) => {
     const query = new URLSearchParams()
     if (params.status) query.set('status', params.status)
     query.set('page', String(params.page ?? 1))
     query.set('pageSize', '15')
-    return request<PagedResult<ProposalSummary>>(`/api/proposals?${query}`, { tenantId })
+    return request<PagedResult<ProposalSummary>>(`/api/proposals?${query}`)
   },
 
-  detail: (tenantId: string, id: string) =>
-    request<ProposalDetail>(`/api/proposals/${id}`, { tenantId }),
+  detail: (id: string) =>
+    request<ProposalDetail>(`/api/proposals/${id}`),
 
-  underwrite: (tenantId: string, actorId: string, id: string, outcome: string, reason: string) =>
+  underwrite: (id: string, outcome: string, reason: string) =>
     request<{ version: number; status: string }>(`/api/proposals/${id}/underwrite`, {
-      tenantId, actorId, method: 'POST', body: { outcome, reason },
+      method: 'POST', body: { outcome, reason },
     }),
 
   /**
    * A chave de idempotência é gerada uma vez por tentativa e reenviada nos retries:
    * é o que permite ao usuário clicar duas vezes sem emitir duas apólices.
    */
-  issue: (tenantId: string, actorId: string, id: string, idempotencyKey: string) =>
+  issue: (id: string, idempotencyKey: string) =>
     request<{ policyId: string; number: string; periodStart: string; periodEnd: string; totalPremium: number; installments: number }>(
       `/api/proposals/${id}/issue`,
-      { tenantId, actorId, method: 'POST', body: {}, idempotencyKey }),
+      { method: 'POST', body: {}, idempotencyKey }),
 }

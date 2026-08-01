@@ -128,9 +128,21 @@ if [ ! -f .env ]; then
     secret="$(head -c 18 /dev/urandom | base64 | tr -d '/+=' | head -c 24)"
     sed -i.bak "s|^${var}=.*|${var}=${secret}|" .env && rm -f .env.bak
   done
+  # Chave de assinatura dos tokens: 48 bytes, bem acima do mínimo de 32 do HMAC-SHA256
+  jwt_key="$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | head -c 64)"
+  sed -i.bak "s|^JWT_SIGNING_KEY=.*|JWT_SIGNING_KEY=${jwt_key}|" .env && rm -f .env.bak
   ok ".env criado com senhas geradas localmente"
 else
-  ok ".env já existe (preservado)"
+  # Instalação anterior à autenticação não tem a chave; acrescenta sem tocar no resto
+  if ! grep -q '^JWT_SIGNING_KEY=' .env; then
+    jwt_key="$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | head -c 64)"
+    printf '
+JWT_SIGNING_KEY=%s
+' "$jwt_key" >> .env
+    ok ".env preservado — chave de assinatura acrescentada"
+  else
+    ok ".env já existe (preservado)"
+  fi
 fi
 
 mkdir -p infrastructure/secrets "$LOG_DIR"
@@ -166,7 +178,10 @@ if [ "$RESET" = "1" ]; then
   docker compose down -v >/dev/null 2>&1 || true
 fi
 
-docker compose up -d secure-database redis >/dev/null 2>&1 \
+# --remove-orphans limpa contêiner de serviço que saiu do compose — o redis, retirado por
+# não ser usado por nenhuma linha de código. Sem isso o aviso de órfão derruba o script em
+# quem já tinha o ambiente de pé.
+docker compose up -d --remove-orphans secure-database >/dev/null 2>&1 \
   || die "docker compose falhou — verifique 'docker compose logs secure-database'"
 
 printf "  aguardando o banco ficar saudável"

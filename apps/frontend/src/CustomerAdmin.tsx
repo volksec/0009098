@@ -39,7 +39,7 @@ function maskPhone(value: string): string {
   return digits.replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d{1,4})$/, '$1-$2')
 }
 
-export function CustomerAdmin({ tenantId }: { tenantId: string }) {
+export function CustomerAdmin() {
   const [data, setData] = useState<PagedResult<Customer> | null>(null)
   const [brokers, setBrokers] = useState<Broker[]>([])
   const [loading, setLoading] = useState(true)
@@ -73,7 +73,7 @@ export function CustomerAdmin({ tenantId }: { tenantId: string }) {
     setLoading(true)
     setError(null)
     try {
-      const result = await api.customers(tenantId, {
+      const result = await api.customers({
         search: search || undefined,
         kind: kind || undefined,
         includeDeleted,
@@ -86,14 +86,14 @@ export function CustomerAdmin({ tenantId }: { tenantId: string }) {
     } finally {
       setLoading(false)
     }
-  }, [tenantId, search, kind, includeDeleted, page])
+  }, [search, kind, includeDeleted, page])
 
   useEffect(() => { void load() }, [load])
 
   useEffect(() => {
-    api.brokers(tenantId).then(setBrokers).catch(() => setBrokers([]))
+    api.brokers().then(setBrokers).catch(() => setBrokers([]))
     setPage(1)
-  }, [tenantId])
+  }, [])
 
   // ---------------------------------------------------------------- formulário
 
@@ -150,10 +150,10 @@ export function CustomerAdmin({ tenantId }: { tenantId: string }) {
         // Documento e tipo não seguem na edição: alterá-los mudaria a identidade do
         // cliente e invalidaria o histórico de apólices emitidas em seu nome.
         const { document: _document, kind: _kind, ...updatable } = payload
-        await api.updateCustomer(tenantId, editingId, updatable)
+        await api.updateCustomer(editingId, updatable)
         notify('ok', 'Cliente atualizado.')
       } else {
-        await api.createCustomer(tenantId, payload)
+        await api.createCustomer(payload)
         notify('ok', 'Cliente cadastrado.')
       }
       setForm(null)
@@ -174,7 +174,7 @@ export function CustomerAdmin({ tenantId }: { tenantId: string }) {
   const confirmDelete = async () => {
     if (!deleting) return
     try {
-      await api.deleteCustomer(tenantId, deleting.id, deleteReason)
+      await api.deleteCustomer(deleting.id, deleteReason)
       notify('ok', 'Cliente excluído logicamente.')
       setDeleting(null)
       setDeleteReason('')
@@ -186,7 +186,7 @@ export function CustomerAdmin({ tenantId }: { tenantId: string }) {
 
   const restore = async (customer: Customer) => {
     try {
-      await api.restoreCustomer(tenantId, customer.id)
+      await api.restoreCustomer(customer.id)
       notify('ok', 'Cliente restaurado.')
       await load()
     } catch (err) {

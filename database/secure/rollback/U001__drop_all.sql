@@ -14,6 +14,10 @@ DROP VIEW IF EXISTS regulatory.policies_summary;
 DROP VIEW IF EXISTS regulatory.customers_masked;
 DROP TABLE IF EXISTS integrity_check_results;
 DROP FUNCTION IF EXISTS app.run_integrity_checks();
+DROP FUNCTION IF EXISTS app.authenticate_lookup(text);
+DROP FUNCTION IF EXISTS app.register_login_failure(uuid, int, int);
+DROP FUNCTION IF EXISTS app.register_login_success(uuid);
+DROP FUNCTION IF EXISTS app.demo_accounts();
 DROP FUNCTION IF EXISTS app.mask_name(text);
 DROP FUNCTION IF EXISTS app.mask_document(text, customer_kind);
 

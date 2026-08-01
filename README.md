@@ -80,11 +80,12 @@ interface e no Live Processing Console.
 | **Domínio** | Rich Domain Model — agregados com invariantes, 19 Value Objects imutáveis, eventos de domínio, specifications, serviços de domínio |
 | **Escrita** | CRUD completo com validação em três camadas (DTO, domínio, banco), transações e mensagens de erro derivadas das constraints |
 | **Concorrência** | Optimistic locking com `xmin` nativo, chaves de idempotência, `SELECT ... FOR UPDATE SKIP LOCKED` |
-| **Multi-tenancy** | Isolamento em camadas independentes, terminando em Row-Level Security com `FORCE` — 3 das 5 previstas ativas hoje, [detalhado adiante](#isolamento-multi-tenant-em-cinco-camadas) |
+| **Autenticação** | Login com PBKDF2-HMAC-SHA256 (210 mil iterações), token JWT de 8 h e bloqueio após 5 tentativas |
+| **Multi-tenancy** | Isolamento em 4 camadas independentes, do claim do token à Row-Level Security com `FORCE` |
 | **Assincronismo** | Outbox transacional — evento e estado confirmados na mesma transação |
 | **Auditoria** | Trilha append-only imposta por `REVOKE` no banco, particionada por mês |
 | **Tempo real** | Live Processing Console via Server-Sent Events, com redação automática de dados sensíveis |
-| **Qualidade** | 236 testes (unitários, propriedade, arquiteturais e integração com PostgreSQL real via Testcontainers) |
+| **Qualidade** | 249 testes (unitários, propriedade, arquiteturais e integração com PostgreSQL real via Testcontainers) |
 
 ### Perfis de acesso
 
@@ -123,7 +124,7 @@ git clone https://github.com/volksec/0009098.git && cd 0009098
 
 O script executa, em ordem: verifica pré-requisitos → gera `.env` com senhas aleatórias →
 restaura pacotes .NET e npm → compila → sobe PostgreSQL e Redis → aguarda o healthcheck →
-aplica as 12 migrations → carrega a massa sintética → inicia backend e frontend → imprime as URLs.
+aplica as 13 migrations → carrega a massa sintética → inicia backend e frontend → imprime as URLs.
 
 ### 2.3 Instalação manual
 
@@ -514,7 +515,7 @@ regra vigente e a mensagem de outbox — ou nada disso.
 │
 ├── database/
 │   ├── secure/
-│   │   ├── migrations/           12 migrations versionadas
+│   │   ├── migrations/           13 migrations versionadas
 │   │   ├── rollback/             Script de reversão por migration
 │   │   ├── scripts/              Init de papéis, extensões, contexto de tenant
 │       └── seeds/                Massa determinística
@@ -841,7 +842,7 @@ original em caso de replay. Resultado: exatamente uma apólice.
 
 ## 12. Segurança de aplicação
 
-### Isolamento multi-tenant em cinco camadas
+### Isolamento multi-tenant em quatro camadas
 
 ```mermaid
 graph LR
@@ -852,25 +853,49 @@ graph LR
     L4["<b>4. Autorização</b><br/>por recurso<br/>RBAC + ABAC"]
     L5["<b>5. RLS</b><br/>FORCE ROW<br/>LEVEL SECURITY"]
     classDef ativa fill:#DCE9FD,stroke:#1F6FEB,color:#0B2447
-    classDef dormente fill:#F4F6F8,stroke:#8894A8,color:#6B7488,stroke-dasharray:4 3
-    class L2,L4,L5 ativa
-    class L1,L3 dormente
+    class L1,L2,L3,L4 ativa
 ```
 
-**Duas das cinco camadas ainda não atuam, e o diagrama diz qual é qual.** Anunciar defesa em
-profundidade contando camada que não roda seria pior que ter menos camadas:
+| Camada | Como atua |
+|---|---|
+| 1 · Claim do JWT | O tenant sai do token assinado com HMAC-SHA256. Não há cabeçalho a forjar: trocar de corretora exige entrar com um usuário dela |
+| 2 · Contexto imutável | `TenantId` sem construtor público que aceite entrada de usuário, verificado por teste arquitetural |
+| 3 · Autorização por recurso | Ex.: emissão devolve `403 NOT_PROPOSAL_OWNER` a quem não é o corretor da proposta |
+| 4 · RLS com `FORCE` | 66 políticas, verificadas conectando como `app_user` sem `BYPASSRLS` |
 
-| Camada | Hoje | Por quê |
-|---|---|---|
-| 1 · Claim do JWT | **dormente** | Não há autenticação: o tenant chega por cabeçalho, marcado como provisório no código |
-| 2 · Contexto imutável | ativa | `TenantId` sem construtor público, verificado por teste arquitetural |
-| 3 · Query filter do ORM | **dormente** | O `PortalDbContext` tem `HasQueryFilter` e os interceptors de auditoria e outbox, mas a fatia atual é Dapper de ponta a ponta — nenhuma requisição passa por ele |
-| 4 · Autorização por recurso | ativa | Ex.: emissão devolve `403 NOT_PROPOSAL_OWNER` a quem não é o corretor da proposta |
-| 5 · RLS com `FORCE` | ativa | 66 políticas, verificadas conectando como `app_user` sem `BYPASSRLS` |
+> **São quatro, e não cinco.** O desenho original previa um query filter global do ORM entre o
+> contexto e a autorização. Ele não existe: a aplicação é Dapper de ponta a ponta, e a camada
+> ficava escrita mas nunca executada. Preferimos remover a promessa a mantê-la no papel — quatro
+> camadas que rodam valem mais que cinco em que uma é decorativa.
 
-O ponto de projeto se sustenta mesmo assim: as camadas são **independentes**, e a última — a
-única que nenhum bug de aplicação contorna — está ativa e testada. As duas dormentes são as que
-dependem de autenticação, e é por isso que ela é a lacuna mais visível do estado atual.
+#### Autenticação
+
+`POST /api/auth/login` verifica a senha com **PBKDF2-HMAC-SHA256, 210 mil iterações**, e devolve
+um token de 8 horas. Não há refresh: expirar é sair.
+
+| Decisão | Por quê |
+|---|---|
+| PBKDF2 e não Argon2id | Vem na biblioteca padrão. Argon2id resistiria melhor a GPU, mas exigiria pacote de terceiros justamente no código onde menos se quer surpresa |
+| Custo gravado junto do hash | `[versão][iterações][sal][derivação]` — aumentar o custo no futuro não invalida senha já cadastrada |
+| Sal por senha | Duas contas com a mesma senha geram hashes diferentes; sem isso, quebrar uma quebraria todas |
+| Comparação em tempo constante | `==` vazaria o prefixo correto pelo tempo gasto |
+| Mensagem única de falha | Distinguir "usuário não existe" de "senha errada" transformaria o login em oráculo de e-mails cadastrados — e a derivação roda mesmo sem usuário, para o tempo não denunciar |
+| Bloqueio de 15 min após 5 erros | Freia força bruta sem permitir que um atacante tranque a conta alheia em definitivo |
+| Chave de assinatura obrigatória | A API recusa subir sem `JWT_SIGNING_KEY`. Uma chave embutida no código assinaria token válido em qualquer instalação |
+| Token em `sessionStorage` | Some ao fechar a aba. Cookie `HttpOnly` protegeria contra XSS, mas traria CSRF e a API é consumida de outra origem — a troca está registrada no código |
+
+O login precisa ler `users` antes de saber o tenant, e a política de RLS dessa tabela exige
+`app.current_tenant()`. Em vez de dar `BYPASSRLS` à aplicação inteira para resolver uma consulta,
+a travessia fica confinada a **três funções `SECURITY DEFINER`** com `search_path` fixo e `EXECUTE`
+restrito — uma para buscar a credencial, uma para registrar falha e uma para registrar sucesso.
+
+```bash
+curl -X POST http://localhost:8080/api/auth/login   -H 'Content-Type: application/json'   -d '{"email":"bruno.lima1@corretora1.test","password":"Corretor@2026"}'
+```
+
+> **Contas de demonstração:** a tela de login lista uma por corretora, todas com a senha
+> `Corretor@2026`. Em sistema real isso seria vazamento; aqui a base é sintética e gerada por
+> seed — sem a lista, ninguém adivinharia um endereço para entrar.
 
 A camada 2 é garantida pelo **sistema de tipos**: o Value Object `TenantId` não tem construtor
 público que aceite entrada de usuário.
@@ -968,7 +993,7 @@ dotnet test tests/integration   # requer Docker (Testcontainers)
 dotnet test tests/architecture  # fronteiras de módulo e regras de modelagem
 ```
 
-**236 testes em quatro projetos.** A tabela abaixo lista o que existe e roda; nada aqui é
+**249 testes em quatro projetos.** A tabela abaixo lista o que existe e roda; nada aqui é
 plano ou intenção.
 
 | Projeto | Testes | Escopo |
@@ -1025,7 +1050,7 @@ local, publicados com a especificação da máquina, versão do PostgreSQL e vol
 | [0001](docs/adr/0001-nome-e-identidade-do-produto.md) | Nome e identidade visual |
 | [0002](docs/adr/0002-monolito-modular.md) | Monólito modular em vez de microserviços |
 | [0003](docs/adr/0003-postgresql-como-banco-objeto-relacional.md) | PostgreSQL como banco objeto-relacional |
-| [0004](docs/adr/0004-defesa-em-profundidade-multitenant.md) | Isolamento multi-tenant em cinco camadas |
+| [0004](docs/adr/0004-defesa-em-profundidade-multitenant.md) | Isolamento multi-tenant em camadas independentes |
 | [0005](docs/adr/0005-estrategia-de-heranca-tph-e-tpt.md) | TPH para `Customer`, TPT para `InsurableAsset` |
 | [0006](docs/adr/0006-outbox-transacional.md) | Outbox transacional no PostgreSQL |
 | [0007](docs/adr/0007-sem-message-broker.md) | Sem message broker externo |
@@ -1092,7 +1117,7 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
 - Proposta e emissão: análise de risco versionada e apólice emitida em transação única, com
   as três camadas anti-duplicidade
 - Live Processing Console via SSE, Database Explorer e demonstração de isolamento
-- 236 testes, dos quais 26 de integração contra PostgreSQL real
+- 249 testes, dos quais 26 de integração contra PostgreSQL real
 
 ---
 

@@ -70,24 +70,34 @@ public sealed class RequestContext(IHttpContextAccessor accessor)
 
     public Guid CorrelationId => _http.Items["CorrelationId"] is Guid id ? id : Guid.Empty;
 
+    /// <summary>
+    /// Tenant da requisição, lido do <b>claim do token assinado</b> — camada 1 do isolamento.
+    /// </summary>
+    /// <remarks>
+    /// Antes chegava pelo cabeçalho <c>X-Tenant-Id</c>, o que significava que qualquer cliente
+    /// escolhia a corretora que queria enxergar. Vindo do claim, trocá-lo exige a chave de
+    /// assinatura: a garantia sai da boa vontade do chamador e passa para a criptografia.
+    /// </remarks>
     public Guid? TenantId =>
-        Guid.TryParse(_http.Request.Headers["X-Tenant-Id"].FirstOrDefault(), out var tenant)
+        Guid.TryParse(_http.User.FindFirst("tenant_id")?.Value, out var tenant)
         && tenant != Guid.Empty ? tenant : null;
 
     public string Profile =>
-        _http.Request.Headers["X-Profile"].FirstOrDefault()?.ToUpperInvariant() is "REGULATOR"
+        _http.User.FindFirst("profile")?.Value?.ToUpperInvariant() is "REGULATOR"
             ? "REGULATOR" : "BROKER";
 
     /// <summary>
     /// Ator da requisição — usado em <c>created_by</c>, <c>deleted_by</c> e na auditoria.
     /// </summary>
     /// <remarks>
-    /// Provisório junto com o tenant: enquanto não há autenticação, o ator chega por
-    /// cabeçalho <c>X-Actor-Id</c>, com uma conta técnica como padrão. Passa a vir do claim
-    /// do token quando o login existir.
+    /// Vem do <c>sub</c> do token. A conta técnica só entra quando não há usuário autenticado,
+    /// que hoje significa apenas as rotas anônimas: com a auditoria ligada, gravar conta
+    /// técnica no lugar de gente seria perder justamente a informação que a trilha existe para
+    /// guardar.
     /// </remarks>
     public Guid ActorId =>
-        Guid.TryParse(_http.Request.Headers["X-Actor-Id"].FirstOrDefault(), out var actor)
+        Guid.TryParse(_http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                      ?? _http.User.FindFirst("sub")?.Value, out var actor)
         && actor != Guid.Empty
             ? actor
             : SystemAccount;

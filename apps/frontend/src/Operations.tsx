@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   ApiError, api, billingApi, claimApi, commissionApi,
-  type BillingSummary, type Broker, type Claim, type ClaimDetail,
+  type BillingSummary, type Claim, type ClaimDetail,
   type Commission, type Installment, type MonthlyCommission,
   type PagedResult, type Policy,
 } from './api'
@@ -39,7 +39,7 @@ function useToasts() {
 
 // ================================================================ Faturamento
 
-export function BillingPage({ tenantId }: { tenantId: string }) {
+export function BillingPage() {
   const [summary, setSummary] = useState<BillingSummary | null>(null)
   const [data, setData] = useState<PagedResult<Installment> | null>(null)
   const [status, setStatus] = useState('')
@@ -52,23 +52,23 @@ export function BillingPage({ tenantId }: { tenantId: string }) {
     setLoading(true)
     try {
       const [s, list] = await Promise.all([
-        billingApi.summary(tenantId),
-        billingApi.installments(tenantId, { status: status || undefined, page }),
+        billingApi.summary(),
+        billingApi.installments({ status: status || undefined, page }),
       ])
       setSummary(s)
       setData(list)
     } finally {
       setLoading(false)
     }
-  }, [tenantId, status, page])
+  }, [status, page])
 
   useEffect(() => { void load() }, [load])
-  useEffect(() => { setPage(1) }, [tenantId])
+  useEffect(() => { setPage(1) }, [])
 
   const pay = async (installment: Installment) => {
     setPaying(installment.id)
     try {
-      await billingApi.pay(tenantId, installment.id, 'SIMULATED_PIX')
+      await billingApi.pay(installment.id, 'SIMULATED_PIX')
       notify('ok', `Parcela ${installment.sequence} quitada (pagamento simulado).`)
       await load()
     } catch (err) {
@@ -199,9 +199,7 @@ export function BillingPage({ tenantId }: { tenantId: string }) {
 
 // ================================================================ Comissões
 
-export function CommissionsPage({ tenantId }: { tenantId: string }) {
-  const [brokers, setBrokers] = useState<Broker[]>([])
-  const [actorId, setActorId] = useState('')
+export function CommissionsPage() {
   const [data, setData] = useState<PagedResult<Commission> | null>(null)
   const [monthly, setMonthly] = useState<MonthlyCommission[]>([])
   const [page, setPage] = useState(1)
@@ -210,34 +208,25 @@ export function CommissionsPage({ tenantId }: { tenantId: string }) {
   const [reason, setReason] = useState('')
   const { notify, view: toastView } = useToasts()
 
-  useEffect(() => {
-    api.brokers(tenantId).then((list) => {
-      setBrokers(list)
-      setActorId(list[0]?.userId ?? '')
-      setPage(1)
-    })
-  }, [tenantId])
-
   const load = useCallback(async () => {
-    if (!actorId) return
     setLoading(true)
     try {
       const [list, month] = await Promise.all([
-        commissionApi.list(tenantId, actorId, { page }),
-        commissionApi.monthly(tenantId, actorId),
+        commissionApi.list({ page }),
+        commissionApi.monthly(),
       ])
       setData(list)
       setMonthly(month)
     } finally {
       setLoading(false)
     }
-  }, [tenantId, actorId, page])
+  }, [page])
 
   useEffect(() => { void load() }, [load])
 
   const release = async (commission: Commission) => {
     try {
-      await commissionApi.release(tenantId, actorId, commission.id)
+      await commissionApi.release(commission.id)
       notify('ok', 'Comissão liberada.')
       await load()
     } catch (err) {
@@ -248,7 +237,7 @@ export function CommissionsPage({ tenantId }: { tenantId: string }) {
   const reverse = async () => {
     if (!reversing) return
     try {
-      await commissionApi.reverse(tenantId, actorId, reversing.id, reason)
+      await commissionApi.reverse(reversing.id, reason)
       notify('ok', 'Estorno lançado como movimento inverso.')
       setReversing(null)
       setReason('')
@@ -265,18 +254,10 @@ export function CommissionsPage({ tenantId }: { tenantId: string }) {
           <div>
             <h2>Extrato de comissões</h2>
             <div className="sub">
-              Filtrado por <code>broker_id = app.current_actor()</code> — política RESTRICTIVE
+              Filtrado por <code>broker_id = app.current_actor()</code>, que sai do token —
+              a política RESTRICTIVE mostra apenas as comissões de quem está autenticado
             </div>
           </div>
-          <select
-            className="search"
-            value={actorId}
-            onChange={(event) => { setActorId(event.target.value); setPage(1) }}
-          >
-            {brokers.map((broker) => (
-              <option key={broker.userId} value={broker.userId}>{broker.fullName}</option>
-            ))}
-          </select>
         </header>
 
         {loading && <div className="state">Carregando…</div>}
@@ -426,7 +407,7 @@ export function CommissionsPage({ tenantId }: { tenantId: string }) {
 
 // ================================================================ Sinistros
 
-export function ClaimsPage({ tenantId }: { tenantId: string }) {
+export function ClaimsPage() {
   const [data, setData] = useState<PagedResult<Claim> | null>(null)
   const [detail, setDetail] = useState<ClaimDetail | null>(null)
   const [policies, setPolicies] = useState<Policy[]>([])
@@ -442,20 +423,20 @@ export function ClaimsPage({ tenantId }: { tenantId: string }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setData(await claimApi.list(tenantId, { status: status || undefined, page }))
+      setData(await claimApi.list({ status: status || undefined, page }))
     } finally {
       setLoading(false)
     }
-  }, [tenantId, status, page])
+  }, [status, page])
 
   useEffect(() => { void load() }, [load])
   useEffect(() => {
     setPage(1)
-    api.policies(tenantId).then(setPolicies).catch(() => setPolicies([]))
-  }, [tenantId])
+    api.policies().then(setPolicies).catch(() => setPolicies([]))
+  }, [])
 
   const openDetail = async (claim: Claim) => {
-    setDetail(await claimApi.detail(tenantId, claim.id))
+    setDetail(await claimApi.detail(claim.id))
   }
 
   const submit = async (event: React.FormEvent) => {
@@ -463,7 +444,7 @@ export function ClaimsPage({ tenantId }: { tenantId: string }) {
     setFieldErrors({})
     setFormError(null)
     try {
-      const created = await claimApi.report(tenantId, {
+      const created = await claimApi.report({
         policyId: form.policyId,
         occurrenceDate: form.occurrenceDate,
         description: form.description,

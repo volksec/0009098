@@ -391,3 +391,46 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   margin-top: auto; padding-top: 10px; font-size: 11px; color: var(--pdc-slate-500);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------------------------------------------------------- login */
+
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--pdc-navy-900);
+}
+
+.login-card {
+  width: min(430px, 100%);
+  background: #fff;
+  border-radius: 14px;
+  padding: 30px 28px;
+  box-shadow: 0 20px 60px rgba(11, 36, 71, .38);
+}
+
+.login-card .brand-name { color: var(--pdc-navy-900); }
+.login-card .brand-sub  { color: var(--pdc-slate-500); }
+.login-card .brand-mark { background: var(--pdc-navy-900); color: #fff; }
+.login-card .field { margin-bottom: 14px; }
+.login-card .field input { width: 100%; box-sizing: border-box; }
+
+.login-demo {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--pdc-slate-200);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* Cartão da sessão no rodapé da barra lateral, no lugar do antigo seletor de tenant */
+.session-card {
+  background: var(--pdc-navy-800);
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 8px;
+  padding: 9px 11px;
+  margin-bottom: 8px;
+}
+.session-name   { font-size: 13px; font-weight: 600; color: #fff; }
+.session-tenant { font-size: 11.5px; color: #9fb3d1; margin-top: 2px; }
