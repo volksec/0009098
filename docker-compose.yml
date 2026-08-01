@@ -81,25 +81,6 @@ services:
       - -c
       - log_min_duration_statement=0
 
-  redis:
-    image: redis:7.4-alpine
-    container_name: pdc-redis
-    <<: *security-baseline
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
-    volumes:
-      - redis-data:/data
-    networks:
-      - pdc-data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 320M
 
   # ------------------------------------------------- laboratório vulnerável (isolado)
   vulnerable-database:
@@ -132,7 +113,6 @@ services:
 volumes:
   secure-db-data:
   vulnerable-db-data:
-  redis-data:
 
 secrets:
   db_password:
