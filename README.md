@@ -123,7 +123,7 @@ git clone https://github.com/volksec/0009098.git && cd 0009098
 ```
 
 O script executa, em ordem: verifica pré-requisitos → gera `.env` com senhas aleatórias →
-restaura pacotes .NET e npm → compila → sobe PostgreSQL e Redis → aguarda o healthcheck →
+restaura pacotes .NET e npm → compila → sobe o PostgreSQL → aguarda o healthcheck →
 aplica as 13 migrations → carrega a massa sintética → inicia backend e frontend → imprime as URLs.
 
 ### 2.3 Instalação manual
@@ -505,7 +505,7 @@ regra vigente e a mensagem de outbox — ou nada disso.
 │   └── <módulo>/
 │       ├── Domain/               Sem dependência de framework
 │       ├── Application/          Casos de uso (vertical slices)
-│       ├── Infrastructure/       EF Core, Dapper, adaptadores
+│       ├── Infrastructure/       Dapper, adaptadores
 │       └── Contracts/            Único assembly referenciável por outros módulos
 │
 ├── shared/
@@ -543,7 +543,7 @@ code review.
 
 | # | Regra |
 |---|---|
-| 1 | `*.Domain` não referencia EF Core, ASP.NET, Serilog ou qualquer framework |
+| 1 | `*.Domain` não referencia EF Core, ASP.NET, Serilog ou qualquer framework — a regra fica de pé mesmo sem EF Core no projeto, para o dia em que alguém adicionar |
 | 2 | `*.Domain` não referencia `*.Application` nem `*.Infrastructure` |
 | 3 | Um módulo só referencia `<Outro>.Contracts` |
 | 4 | Não existem ciclos entre módulos |
@@ -621,9 +621,9 @@ toda a lógica de negócio sem banco, sem HTTP e sem mock de framework.
 
 | Camada | Escolha | Racional |
 |---|---|---|
-| **Backend** | .NET 9, ASP.NET Core (Minimal API), Dapper, Npgsql, EF Core, Swashbuckle | Tipos fortes o bastante para expressar Value Objects e agregados. Dapper carrega as consultas: recursos como tipos compostos, `daterange` e `xmin` são escritos em SQL direto, onde ficam legíveis. EF Core está referenciado para *owned types* e query filters, mas a fatia atual usa Dapper |
+| **Backend** | .NET 9, ASP.NET Core (Minimal API), Dapper, Npgsql, JwtBearer, Swashbuckle | Tipos fortes o bastante para expressar Value Objects e agregados. Dapper carrega as consultas: tipos compostos, `daterange` e `xmin` são escritos em SQL direto, onde ficam legíveis. **Não há ORM** — o `PortalDbContext` existia sem nunca ser chamado e foi removido, junto com os pacotes de EF Core |
 | **Frontend** | React, TypeScript, Vite | **Três dependências de runtime, e nenhuma de interface.** O design system é escrito à mão em CSS com tokens `pdc-*` — trazer Tailwind ou uma biblioteca de componentes contradiria o requisito de componentes próprios. Estado de servidor resolvido com um hook de 20 linhas em vez de TanStack Query, e validação com o mesmo schema do backend em vez de Zod |
-| **Dados** | PostgreSQL 16 | Detalhado na seção do banco objeto-relacional. Redis sobe no Compose mas **ainda não é usado pelo código** — está previsto para cache de catálogo e contador de rate limit |
+| **Dados** | PostgreSQL 16 | Único armazenamento. Detalhado na seção do banco objeto-relacional. O Redis chegou a subir no Compose sem que linha alguma o usasse, e foi retirado: infraestrutura morta induz quem lê a procurar no código o que não existe |
 | **Mensageria** | Nenhuma — Outbox no PostgreSQL | Broker externo não oferece garantia transacional sem 2PC ([ADR-0007](docs/adr/0007-sem-message-broker.md)) |
 | **Testes** | xUnit, FluentAssertions, FsCheck, Testcontainers, NetArchTest | PostgreSQL real nos testes de integração: RLS, `EXCLUDE`, tipos compostos e `xmin` não existem em banco em memória |
 | **Infra** | Docker Compose, GitHub Actions | Ambiente completo em um comando |
@@ -735,7 +735,7 @@ Não existe caminho de código que produza uma apólice com prêmio negativo ou 
 | **Particionamento** | `audit_events`, `security_events`, `outbox_messages` por mês |
 | **`xmin`** | Optimistic locking nativo, sem coluna extra que possa ser esquecida em um `UPDATE` |
 | **`SKIP LOCKED`** | Outbox consumida por múltiplos workers sem contenção |
-| **`pg_stat_statements`** | Planos e estatísticas reais para o Query Inspector |
+| **`pg_stat_statements`** | Estatísticas de execução por consulta, habilitadas no banco e disponíveis para inspeção via `psql` |
 
 [Justificativa da escolha e alternativas](docs/adr/0003-postgresql-como-banco-objeto-relacional.md)
 
@@ -1029,17 +1029,18 @@ de um centavo por parcela (método do maior resto).
 
 ## 15. Ferramentas de engenharia
 
-| Ferramenta | Função |
-|---|---|
-| **Live Processing Console** | Eventos em tempo real via SSE, 14 filtros e 16 categorias, com redação automática de dados sensíveis |
-| **Database Explorer** | Grafo navegável lido do catálogo real: tabelas, relações, cardinalidades, mapeamento ORM, índices, constraints, políticas de RLS, partições |
-| **Query Inspector** | SQL executado, parâmetros mascarados, tempo, linhas, `EXPLAIN (ANALYZE, BUFFERS)`, índice utilizado, tipo de scan, origem no código |
-| **Transaction Inspector** | Duração, nível de isolamento, locks, `COMMIT`/`ROLLBACK`, eventos, Outbox, auditoria |
-| **Data Browser** | Consulta interativa aos dados com filtros tipados e navegação por FK. Sem SQL livre: o filtro é traduzido pelo servidor em consulta parametrizada a partir de whitelist |
-| **Engineering Lab** | Comparativos medidos: ORM vs Dapper, com/sem índice, N+1 vs projeção, lazy vs eager, paginado vs não paginado |
+Três telas, e as três leem o sistema real — nenhuma é maquete.
 
-Os números de performance exibidos vêm de `EXPLAIN (ANALYZE, BUFFERS)` e de medição no ambiente
-local, publicados com a especificação da máquina, versão do PostgreSQL e volume de dados.
+| Tela | O que faz |
+|---|---|
+| **Live Console** | Eventos internos em tempo real via SSE, com filtro por categoria e texto e redação de dados sensíveis. A emissão de uma apólice aparece passo a passo enquanto acontece |
+| **Banco de dados** | Estatísticas lidas do catálogo do PostgreSQL a cada requisição — `pg_tables`, `pg_indexes`, `pg_policies`, `pg_constraint`. Lista as políticas de RLS com a coluna `FORCE` e as constraints de exclusão com a definição. Se uma migration criar tabela nova, ela aparece sem que nada precise ser atualizado |
+| **Isolamento** | Busca um cliente pelo identificador exato com o token da sessão. Entre por outra corretora e o mesmo recurso responde 404 |
+
+> **Query Inspector, Transaction Inspector, Data Browser e Engineering Lab não existem.** Estavam
+> previstos na fase 7 e chegaram a constar aqui como se estivessem prontos — o que é o mesmo
+> defeito que este documento passou a evitar em outros pontos. Ficam registrados como próximo
+> passo, não como entrega.
 
 ---
 
@@ -1116,7 +1117,7 @@ docker compose ps && curl -s http://localhost:8080/health/ready && tail -20 .run
   dos três planos com o snapshot dos fatores
 - Proposta e emissão: análise de risco versionada e apólice emitida em transação única, com
   as três camadas anti-duplicidade
-- Live Processing Console via SSE, Database Explorer e demonstração de isolamento
+- Live Console via SSE, leitura do catálogo do PostgreSQL e demonstração de isolamento
 - 249 testes, dos quais 26 de integração contra PostgreSQL real
 
 ---
